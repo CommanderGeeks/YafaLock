@@ -15,6 +15,23 @@ import {
 import { useWeb3 } from '../contexts/Web3Context';
 import { StatCard, TransactionButton, Countdown } from '../components/shared';
 import { CreateOfferModal, ClaimPublicOfferModal } from '../components/modals';
+import { CONTRACT_CONFIG } from '../config/contracts';
+
+// Token Approval State Interface
+interface TokenApprovalState {
+  isCheckingApproval: boolean;
+  isApproving: boolean;
+  currentAllowance: string;
+  needsApproval: boolean;
+}
+
+// ERC20 ABI for token interactions
+const ERC20_ABI = [
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function balanceOf(address account) view returns (uint256)",
+  "function decimals() view returns (uint8)"
+];
 
 export const MyPortfolio: React.FC = () => {
   const { vestingStatus, privateOffer, publicOffer, web3State, refreshData, loading } = useWeb3();
@@ -22,6 +39,14 @@ export const MyPortfolio: React.FC = () => {
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [myOffer, setMyOffer] = useState<any>(null);
   const [loadingMyOffer, setLoadingMyOffer] = useState(false);
+  
+  // Token approval state
+  const [approvalState, setApprovalState] = useState<TokenApprovalState>({
+    isCheckingApproval: false,
+    isApproving: false,
+    currentAllowance: '0',
+    needsApproval: false,
+  });
 
   // Helper function to format numbers
   const formatNumber = (value: string | number, decimals: number = 2): string => {
@@ -34,15 +59,68 @@ export const MyPortfolio: React.FC = () => {
     });
   };
 
-  // Helper function to format currency
-  const formatCurrency = (value: string | number, decimals: number = 2): string => {
-    if (!value || value === '0' || value === 0) return '$0.00';
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    if (num < 0.01) return '< $0.01';
-    return `$${num.toLocaleString(undefined, { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: decimals 
-    })}`;
+  // Check token allowance function
+  const checkTokenApproval = async (): Promise<void> => {
+    if (!web3State.provider || !web3State.account || !vestingStatus?.totalAmount) return;
+    
+    setApprovalState(prev => ({ ...prev, isCheckingApproval: true }));
+    
+    try {
+      const tokenContract = new window.ethers.Contract(
+        CONTRACT_CONFIG.YAFA_TOKEN_ADDRESS,
+        ERC20_ABI,
+        web3State.provider
+      );
+      
+      const allowance = await tokenContract.allowance(
+        web3State.account,
+        CONTRACT_CONFIG.YAFA_LOCK_ADDRESS
+      );
+      
+      const currentAllowanceFormatted = window.ethers.utils.formatUnits(allowance, 6);
+      const needsApproval = allowance.lt(window.ethers.utils.parseUnits(vestingStatus.totalAmount, 6));
+      
+      setApprovalState(prev => ({
+        ...prev,
+        currentAllowance: currentAllowanceFormatted,
+        needsApproval,
+        isCheckingApproval: false
+      }));
+    } catch (error) {
+      console.error('Error checking allowance:', error);
+      setApprovalState(prev => ({ 
+        ...prev, 
+        isCheckingApproval: false,
+        needsApproval: true // Assume approval needed if check fails
+      }));
+    }
+  };
+
+  // Handle token approval
+  const handleApproveTokens = async (): Promise<void> => {
+    if (!web3State.provider || !web3State.account || !vestingStatus?.totalAmount) return;
+    
+    setApprovalState(prev => ({ ...prev, isApproving: true }));
+    
+    try {
+      const signer = web3State.provider.getSigner();
+      const tokenContract = new window.ethers.Contract(
+        CONTRACT_CONFIG.YAFA_TOKEN_ADDRESS,
+        ERC20_ABI,
+        signer
+      );
+      
+      const amountToApprove = window.ethers.utils.parseUnits(vestingStatus.totalAmount, 6);
+      
+      const tx = await tokenContract.approve(CONTRACT_CONFIG.YAFA_LOCK_ADDRESS, amountToApprove);
+      await tx.wait();
+      
+      // Recheck approval after successful transaction
+      await checkTokenApproval();
+    } catch (error) {
+      console.error('Failed to approve tokens:', error);
+      setApprovalState(prev => ({ ...prev, isApproving: false }));
+    }
   };
 
   // Load user's community offer
@@ -54,6 +132,7 @@ export const MyPortfolio: React.FC = () => {
       const offerData = await web3State.contract.getCommunityMemberOffer(web3State.account);
       console.log('My offer data:', offerData);
       
+      // Handle array response - [offerer, usdtAmount, tokenAmount, active]
       if (offerData[3]) { // if active
         setMyOffer({
           offerer: offerData[0],
@@ -72,11 +151,19 @@ export const MyPortfolio: React.FC = () => {
     }
   };
 
+  // Load my offer when component mounts or wallet changes
   useEffect(() => {
     if (web3State.connected && vestingStatus?.initialized) {
       loadMyOffer();
     }
   }, [web3State.connected, web3State.account, vestingStatus?.initialized]);
+
+  // Check approval when component loads and when relevant state changes
+  useEffect(() => {
+    if (vestingStatus?.established && !vestingStatus?.initialized && web3State.connected) {
+      checkTokenApproval();
+    }
+  }, [vestingStatus, web3State.connected, web3State.account]);
 
   const handleRevokeOffer = async (): Promise<void> => {
     try {
@@ -92,6 +179,7 @@ export const MyPortfolio: React.FC = () => {
     }
   };
 
+  // Helper function to format duration
   const formatDuration = (seconds: number): string => {
     if (seconds === 0) return 'No duration set';
     
@@ -116,6 +204,15 @@ export const MyPortfolio: React.FC = () => {
   const handleInitializeLock = async (): Promise<void> => {
     try {
       if (!web3State.contract) return;
+      
+      // First check if approval is needed
+      await checkTokenApproval();
+      
+      // If approval is needed, don't proceed with lock
+      if (approvalState.needsApproval) {
+        console.log('Token approval needed before locking');
+        return;
+      }
       
       const tx = await web3State.contract.lock();
       await tx.wait();
@@ -242,6 +339,7 @@ export const MyPortfolio: React.FC = () => {
             </div>
 
             <div className="space-y-6">
+              {/* Allocation Details */}
               <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                   <Info className="w-5 h-5 mr-2 text-emerald-400" />
@@ -274,15 +372,92 @@ export const MyPortfolio: React.FC = () => {
                 </div>
               </div>
 
+              {/* What Happens Next */}
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  <Clock className="w-5 h-5 mr-2 text-emerald-400" />
+                  What Happens When You Initialize
+                </h3>
+                <div className="space-y-3 text-sm text-gray-300">
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <p>Your vesting schedule will begin immediately</p>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <p>Tokens will unlock monthly over {vestingStatus.monthsVested} months</p>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <p>You can participate in OTC trading opportunities</p>
+                  </div>
+                  <div className="flex items-start space-x-3">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                    <p>This action cannot be undone once confirmed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Token Approval Section - Show if approval needed */}
+              {approvalState.needsApproval && (
+                <div className="bg-orange-900/20 border border-orange-500/30 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-orange-400 mb-4 flex items-center">
+                    <AlertCircle className="w-5 h-5 mr-2" />
+                    Token Approval Required
+                  </h3>
+                  <div className="space-y-3 text-sm text-gray-300 mb-4">
+                    <p>Before you can lock your tokens, you need to approve the contract to transfer them.</p>
+                    <div className="flex items-center justify-between bg-gray-700/30 rounded p-3">
+                      <span>Amount to approve:</span>
+                      <span className="font-semibold text-white">{formatNumber(vestingStatus.totalAmount)} YAFA</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-gray-700/30 rounded p-3">
+                      <span>Current allowance:</span>
+                      <span className="font-semibold text-white">{formatNumber(approvalState.currentAllowance)} YAFA</span>
+                    </div>
+                  </div>
+                  <TransactionButton 
+                    onClick={handleApproveTokens}
+                    disabled={approvalState.isApproving || approvalState.isCheckingApproval}
+                    variant="warning"
+                    className="w-full py-3 text-lg font-semibold"
+                  >
+                    <div className="flex items-center justify-center space-x-2">
+                      {approvalState.isApproving ? (
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-5 h-5" />
+                      )}
+                      <span>
+                        {approvalState.isApproving ? 'Approving...' : 'Approve Tokens'}
+                      </span>
+                    </div>
+                  </TransactionButton>
+                </div>
+              )}
+
+              {/* Initialize Button - Show if approved or approval not needed */}
               <div className="pt-4">
                 <TransactionButton 
                   onClick={handleInitializeLock}
+                  disabled={approvalState.needsApproval || approvalState.isCheckingApproval}
                   variant="primary"
                   className="w-full py-4 text-lg font-semibold"
                 >
                   <div className="flex items-center justify-center space-x-2">
-                    <Lock className="w-5 h-5" />
-                    <span>Initialize & Lock Tokens</span>
+                    {approvalState.isCheckingApproval ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Lock className="w-5 h-5" />
+                    )}
+                    <span>
+                      {approvalState.isCheckingApproval 
+                        ? 'Checking Approval...' 
+                        : approvalState.needsApproval 
+                          ? 'Approve Tokens First' 
+                          : 'Initialize & Lock Tokens'
+                      }
+                    </span>
                   </div>
                 </TransactionButton>
               </div>
@@ -313,48 +488,49 @@ export const MyPortfolio: React.FC = () => {
         </TransactionButton>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
+      {/* Portfolio Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          icon={Coins}
           title="Total Allocation"
           value={`${formatNumber(vestingStatus.totalAmount)} YAFA`}
-          icon={Coins}
-          trend="neutral"
-        />
-        <StatCard 
-          title="Claimed"
-          value={`${formatNumber(vestingStatus.totalClaimed)} YAFA`}
-          subtitle={`${vestingStatus.monthsClaimed}/${vestingStatus.monthsVested} months`}
-          icon={CheckCircle}
           trend="up"
         />
-        <StatCard 
-          title="Available to Claim"
-          value={`${formatNumber(vestingStatus.claimableNow)} YAFA`}
-          icon={TrendingUp}
-          trend={parseFloat(vestingStatus.claimableNow) > 0 ? "up" : "neutral"}
+        <StatCard
+          icon={CheckCircle}
+          title="Tokens Claimed"
+          value={`${formatNumber(vestingStatus.totalClaimed)} YAFA`}
+          trend="up"
         />
-        <StatCard 
-          title="USDT Received"
-          value={formatCurrency(vestingStatus.totalUsdtReceived)}
-          subtitle="From OTC trades"
+        <StatCard
           icon={DollarSign}
+          title="USDT Received (OTC)"
+          value={`$${formatNumber(vestingStatus.totalUsdtReceived)}`}
+          trend="up"
+        />
+        <StatCard
+          icon={TrendingUp}
+          title="Progress"
+          value={`${vestingStatus.monthsVested > 0 ? Math.round((vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100) : 0}%`}
           trend="up"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
-          <h3 className="text-xl font-semibold text-white mb-4">Vesting Progress</h3>
-          
-          <div className="mb-6">
-            <div className="flex justify-between text-sm text-gray-400 mb-2">
-              <span>Progress</span>
-              <span>{vestingStatus.monthsClaimed}/{vestingStatus.monthsVested} months</span>
+      {/* Vesting Progress */}
+      <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <h3 className="text-xl font-semibold text-white mb-6">Vesting Progress</h3>
+        
+        <div className="space-y-6">
+          {/* Progress Bar */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm text-gray-400">
+              <span>Months Claimed: {vestingStatus.monthsClaimed}/{vestingStatus.monthsVested}</span>
+              <span>{vestingStatus.monthsVested > 0 ? Math.round((vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100) : 0}% Complete</span>
             </div>
-            <div className="w-full bg-gray-700/50 rounded-full h-3">
+            <div className="w-full bg-gray-700 rounded-full h-3">
               <div 
-                className="bg-emerald-500 h-3 rounded-full transition-all duration-300"
-                style={{
+                className="bg-gradient-to-r from-emerald-500 to-green-400 h-3 rounded-full transition-all duration-500"
+                style={{ 
                   width: `${vestingStatus.monthsVested > 0 ? (vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100 : 0}%`
                 }}
               />
@@ -366,6 +542,7 @@ export const MyPortfolio: React.FC = () => {
             </div>
           </div>
 
+          {/* Claim Section */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <div>
@@ -389,150 +566,169 @@ export const MyPortfolio: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
 
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-white">OTC Opportunities</h3>
-            <button 
+      {/* My Active OTC Offer */}
+      <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-white">My Active OTC Offer</h3>
+          {loadingMyOffer && (
+            <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
+          )}
+        </div>
+
+        {myOffer ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm text-gray-400">Your Offer</p>
+                <p className="text-lg font-semibold text-white">
+                  {formatNumber(myOffer.tokenAmount)} YAFA → ${formatNumber(myOffer.usdtAmount)} USDT
+                </p>
+              </div>
+              <TransactionButton
+                onClick={handleRevokeOffer}
+                variant="warning"
+                className="px-4 py-2 text-sm"
+              >
+                Revoke
+              </TransactionButton>
+            </div>
+            <div className="text-xs text-emerald-400">
+              ✓ Active - Waiting for project acceptance
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-gray-500 mb-4">
+              <DollarSign className="w-12 h-12 mx-auto mb-2" />
+              <p>No active OTC offer</p>
+            </div>
+            <button
               onClick={() => setShowCreateOffer(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm flex items-center space-x-2"
+              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-6 py-3 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
             >
-              <Plus className="w-4 h-4" />
-              <span>Place an OTC Offer to The Yafa Foundation</span>
+              <Plus className="w-4 h-4 mr-2 inline" />
+              Create OTC Offer
             </button>
           </div>
+        )}
+      </div>
 
-          {myOffer && (
-            <div className="mb-6">
-              <div className="bg-gray-700/30 border border-emerald-500/30 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-white">Active Offer</h4>
-                  <span className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-300 rounded-full">
-                    Live
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mb-3">
-                  <div>
-                    <p className="text-sm text-gray-400">Offering</p>
-                    <p className="text-white font-semibold">{formatNumber(myOffer.tokenAmount)} YAFA</p>
+      {/* OTC Opportunities */}
+      <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-white">OTC Opportunities</h3>
+          <button 
+            onClick={() => setShowCreateOffer(true)}
+            className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+          >
+            <Plus className="w-4 h-4 mr-2 inline" />
+            Create Offer
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Public OTC Offer */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-white">Public Offer</h4>
+            {publicOffer?.active ? (
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Available:</span>
+                    <span className="text-white">{formatNumber(publicOffer.remainingTokenAmount)} YAFA</span>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Asking Price</p>
-                    <p className="text-lg font-semibold text-emerald-400">{formatCurrency(myOffer.usdtAmount)}</p>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Price:</span>
+                    <span className="text-white">${(parseFloat(publicOffer.remainingUsdtAmount) / parseFloat(publicOffer.remainingTokenAmount)).toFixed(4)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total USDT:</span>
+                    <span className="text-white">${formatNumber(publicOffer.remainingUsdtAmount)}</span>
                   </div>
                 </div>
-                <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3 mb-4">
-                  <div className="text-sm text-gray-300">
-                    <p className="mb-1">Rate: {formatCurrency((parseFloat(myOffer.usdtAmount) / parseFloat(myOffer.tokenAmount)).toString())} per YAFA</p>
-                    <p className="text-xs text-gray-400">Your offer is visible to the Yafa Foundation</p>
-                  </div>
-                </div>
-                <div className="flex space-x-3">
+                <div className="mt-4 flex space-x-2">
                   <button 
-                    onClick={loadMyOffer}
-                    disabled={loadingMyOffer}
-                    className="flex-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-200 border border-gray-600/30 py-2 px-4 rounded-full transition-colors backdrop-blur-sm text-sm"
+                    onClick={() => setShowClaimModal(true)}
+                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]"
                   >
-                    {loadingMyOffer ? 'Refreshing...' : 'Refresh Status'}
+                    Participate
                   </button>
-                  <TransactionButton 
-                    onClick={handleRevokeOffer}
-                    variant="warning"
-                    className="flex-1 text-sm py-2"
-                  >
-                    Revoke Offer
-                  </TransactionButton>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {privateOffer?.active && (
-            <div className="mb-6">
-              <div className="bg-gray-700/30 border border-blue-500/30 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-white">Private Offer</h4>
-                  <span className="px-2 py-1 text-xs bg-blue-500/20 text-blue-300 rounded-full">
-                    Exclusive
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <p className="text-gray-400">You Give</p>
-                    <p className="text-white font-semibold">{formatNumber(privateOffer.tokenAmount)} YAFA</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400">You Receive</p>
-                    <p className="text-emerald-400 font-semibold">{formatCurrency(privateOffer.usdtAmount)}</p>
-                  </div>
-                </div>
-                <div className="mb-3">
-                  <Countdown targetTimestamp={privateOffer.offerStartTime + privateOffer.offerDuration} />
-                </div>
-                <TransactionButton 
-                  onClick={handleAcceptPrivateOffer}
-                  variant="primary"
-                  className="w-full"
-                >
-                  Accept Private Offer
-                </TransactionButton>
-              </div>
-            </div>
-          )}
-
-          {publicOffer?.active && (
-            <div className="mb-6">
-              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4 mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-white">Public Offer</h4>
-                  <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded-full text-emerald-300">
-                    Active
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                  <div>
-                    <p className="text-gray-400">Rate</p>
-                    <p className="text-white font-semibold">
-                      {formatCurrency(
-                        (parseFloat(publicOffer.remainingUsdtAmount) / parseFloat(publicOffer.remainingTokenAmount)).toString()
-                      )} / YAFA
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-400">Available</p>
-                    <p className="text-emerald-400 font-semibold">{formatNumber(publicOffer.remainingTokenAmount)} YAFA</p>
-                  </div>
-                </div>
-                <div className="mb-3">
+                <div className="mt-3 text-xs text-blue-400">
                   <Countdown targetTimestamp={publicOffer.offerStartTime + publicOffer.offerDuration} />
                 </div>
-                <button 
-                  onClick={() => setShowClaimModal(true)}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold py-3 px-4 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)]"
-                >
-                  Participate in Offer
-                </button>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4 text-center">
+                <p className="text-gray-400">No active public offer</p>
+              </div>
+            )}
+          </div>
 
-          {!privateOffer?.active && !publicOffer?.active && !myOffer && (
-            <div className="text-center py-8 text-gray-400">
-              <p>No active OTC offers available</p>
-              <p className="text-sm mt-2">Create a community offer to sell your tokens</p>
-            </div>
-          )}
+          {/* Private OTC Offer */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-white">Private Offer</h4>
+            {privateOffer?.active ? (
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Tokens:</span>
+                    <span className="text-white">{formatNumber(privateOffer.tokenAmount)} YAFA</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Price:</span>
+                    <span className="text-white">${(parseFloat(privateOffer.usdtAmount) / parseFloat(privateOffer.tokenAmount)).toFixed(4)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total USDT:</span>
+                    <span className="text-white">${formatNumber(privateOffer.usdtAmount)}</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <TransactionButton 
+                    onClick={handleAcceptPrivateOffer}
+                    variant="primary"
+                    className="w-full"
+                  >
+                    Accept Offer
+                  </TransactionButton>
+                </div>
+                <div className="mt-3 text-xs text-purple-400">
+                  <Countdown targetTimestamp={privateOffer.offerStartTime + privateOffer.offerDuration} />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4 text-center">
+                <p className="text-gray-400">No private offer available</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <CreateOfferModal 
-        isOpen={showCreateOffer}
-        onClose={() => setShowCreateOffer(false)}
-      />
-      <ClaimPublicOfferModal 
-        isOpen={showClaimModal}
-        onClose={() => setShowClaimModal(false)}
-      />
+      {/* Modals */}
+      {showCreateOffer && (
+        <CreateOfferModal
+          isOpen={showCreateOffer}
+          onClose={() => {
+            setShowCreateOffer(false);
+            loadMyOffer();
+            refreshData();
+          }}
+        />
+      )}
+
+      {showClaimModal && publicOffer && (
+        <ClaimPublicOfferModal
+          isOpen={showClaimModal}
+          onClose={() => {
+            setShowClaimModal(false);
+            refreshData();
+          }}
+        />
+      )}
     </div>
   );
 };

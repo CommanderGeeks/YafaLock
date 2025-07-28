@@ -1,7 +1,7 @@
 // Contract Configuration
 export const CONTRACT_CONFIG = {
   // Replace these with your actual deployed contract addresses
-  YAFA_LOCK_ADDRESS: '0x60886a69dB0dF9FBc03C420FfB16De4038279B2b', 
+  YAFA_LOCK_ADDRESS: '0xE028717726469BC35A661cD099f44B9db5522dDc', 
   YAFA_TOKEN_ADDRESS: '0xB95a30Af9A812a1C633A98fB2F5A7257aCdc2cE1',
   USDT_ADDRESS: '0x81eA976BdeEe2151171a7a2c19Bad80b6C629afd',
   CHAIN_ID: 8453, // Base Mainnet
@@ -863,19 +863,6 @@ export const YAFA_LOCK_ABI = [
 		"name": "privateOTCOffer",
 		"outputs": [],
 		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "projectAddress",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
 		"type": "function"
 	},
 	{
