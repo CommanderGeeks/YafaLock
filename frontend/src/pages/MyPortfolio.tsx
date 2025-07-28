@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Coins, 
   CheckCircle, 
@@ -20,6 +20,8 @@ export const MyPortfolio: React.FC = () => {
   const { vestingStatus, privateOffer, publicOffer, web3State, refreshData, loading } = useWeb3();
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
+  const [myOffer, setMyOffer] = useState<any>(null);
+  const [loadingMyOffer, setLoadingMyOffer] = useState(false);
 
   // Helper function to format numbers
   const formatNumber = (value: string | number, decimals: number = 2): string => {
@@ -33,14 +35,53 @@ export const MyPortfolio: React.FC = () => {
   };
 
   // Helper function to format currency
-  const formatCurrency = (value: string | number, symbol: string = '$'): string => {
-    if (!value || value === '0' || value === 0) return `${symbol}0`;
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    if (num < 0.01) return `${symbol}< 0.01`;
-    return `${symbol}${num.toLocaleString(undefined, { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
-    })}`;
+  // Load user's community offer
+  const loadMyOffer = async () => {
+    if (!web3State.contract || !web3State.account) return;
+    
+    setLoadingMyOffer(true);
+    try {
+      const offerData = await web3State.contract.getCommunityMemberOffer(web3State.account);
+      console.log('My offer data:', offerData);
+      
+      // Handle array response - [offerer, usdtAmount, tokenAmount, active]
+      if (offerData[3]) { // if active
+        setMyOffer({
+          offerer: offerData[0],
+          usdtAmount: window.ethers.utils.formatUnits(offerData[1], 6),
+          tokenAmount: window.ethers.utils.formatUnits(offerData[2], 6),
+          active: offerData[3],
+        });
+      } else {
+        setMyOffer(null);
+      }
+    } catch (error) {
+      console.error('Error loading my offer:', error);
+      setMyOffer(null);
+    } finally {
+      setLoadingMyOffer(false);
+    }
+  };
+
+  // Load my offer when component mounts or wallet changes
+  useEffect(() => {
+    if (web3State.connected && vestingStatus?.initialized) {
+      loadMyOffer();
+    }
+  }, [web3State.connected, web3State.account, vestingStatus?.initialized]);
+
+  const handleRevokeOffer = async (): Promise<void> => {
+    try {
+      if (!web3State.contract) return;
+      
+      const tx = await web3State.contract.revokeCommunityMemberOTCOffer();
+      await tx.wait();
+      
+      await loadMyOffer();
+      await refreshData();
+    } catch (error) {
+      console.error('Failed to revoke offer:', error);
+    }
   };
 
   // Helper function to format duration
@@ -375,15 +416,137 @@ export const MyPortfolio: React.FC = () => {
           </div>
         </div>
 
+        {/* My Active OTC Offer */}
+        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-white">My Active OTC Offer</h3>
+            {loadingMyOffer && (
+              <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
+            )}
+          </div>
+
+          {myOffer ? (
+            <div className="space-y-4">
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-emerald-300">Active Offer</h4>
+                  <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded-full text-emerald-300">
+                    Live
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-sm text-gray-400">Offering</p>
+                    <p className="text-lg font-semibold text-white">{formatNumber(myOffer.tokenAmount)} YAFA</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Asking Price</p>
+                    <p className="text-lg font-semibold text-emerald-400">{formatCurrency(myOffer.usdtAmount)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3 mb-4">
+                  <div className="text-sm text-gray-300">
+                    <p className="mb-1">Rate: {formatCurrency((parseFloat(myOffer.usdtAmount) / parseFloat(myOffer.tokenAmount)).toString())} per YAFA</p>
+                    <p className="text-xs text-gray-400">Your offer is visible to the Yafa Foundation</p>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button 
+                    onClick={() => loadMyOffer()}
+                    disabled={loadingMyOffer}
+                    className="flex-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-200 border border-gray-600/30 py-2 px-4 rounded-full transition-colors backdrop-blur-sm text-sm"
+                  >
+                    Refresh Status
+                  </button>
+                  <TransactionButton 
+                    onClick={handleRevokeOffer}
+                    variant="warning"
+                    className="flex-1"
+                  >
+                    Revoke Offer
+                  </TransactionButton>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <DollarSign className="w-12 h-12 mx-auto text-gray-500 mb-4 opacity-50" />
+              <p className="text-gray-400 mb-2">No active OTC offer</p>
+              <p className="text-sm text-gray-500 mb-4">Create an offer to sell your tokens to the Yafa Foundation</p>
+              <button 
+                onClick={() => setShowCreateOffer(true)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-6 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)]"
+              >
+                Create OTC Offer
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Vesting Progress */}
+        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+          <h3 className="text-xl font-semibold text-white mb-4">Vesting Progress</h3>
+          
+          {/* Progress Bar */}
+          <div className="mb-6">
+            <div className="flex justify-between text-sm text-gray-400 mb-2">
+              <span>Progress</span>
+              <span>{vestingStatus.monthsClaimed}/{vestingStatus.monthsVested} months</span>
+            </div>
+            <div className="w-full bg-gray-700/50 rounded-full h-3">
+              <div 
+                className="bg-emerald-500 h-3 rounded-full transition-all duration-300"
+                style={{
+                  width: `${vestingStatus.monthsVested > 0 ? (vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100 : 0}%`
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>Started</span>
+              <span>{vestingStatus.monthsVested > 0 ? Math.round((vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100) : 0}%</span>
+              <span>Complete</span>
+            </div>
+          </div>
+
+          {/* Claim Section */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-400">Available to Claim</p>
+                <p className="text-2xl font-bold text-white">{formatNumber(vestingStatus.claimableNow)} YAFA</p>
+              </div>
+              <TransactionButton 
+                onClick={handleClaimVested}
+                disabled={parseFloat(vestingStatus.claimableNow) === 0}
+                variant="success"
+              >
+                Claim Tokens
+              </TransactionButton>
+            </div>
+
+            {vestingStatus.nextClaimTime > 0 && (
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3">
+                <p className="text-sm text-gray-400 mb-1">Next Claim Available</p>
+                <Countdown targetTimestamp={vestingStatus.nextClaimTime} />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* OTC Opportunities */}
         <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-white">OTC Opportunities</h3>
             <button 
               onClick={() => setShowCreateOffer(true)}
-              className="text-emerald-400 hover:text-emerald-300 transition-colors"
+              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm"
             >
-              <Plus className="w-5 h-5" />
+              Place an OTC Offer to The Yafa Foundation
             </button>
           </div>
 

@@ -123,6 +123,12 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         VestingInfo storage info = vestingInfo[msg.sender];
         require(info.established, "vesting not established");
         require(!info.initialized, "already locked");
+
+         // Transfer tokens from user to contract for vesting
+        require(
+            token.transferFrom(msg.sender, address(this), info.totalAmount),
+            "token transfer failed"
+        );
         
         // Set the initial lock time and mark as initialized
         info.initialLockTime = block.timestamp;

@@ -99,22 +99,45 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       try {
         const vestingData = await contract.getVestingStatus(account);
         console.log('Raw vesting data:', vestingData);
+        console.log('Array length:', vestingData.length);
+        console.log('Array contents:', vestingData.map((item, index) => `[${index}]: ${item.toString()}`));
         
-        // Handle array response - [initialized, established, totalAmount, totalClaimed, tokensOTCed, totalUsdtReceived, availableTokens, claimableNow, monthsClaimed, monthsVested, nextClaimTime, initialLockDuration]
-        setVestingStatus({
-          initialized: vestingData[0],
-          established: vestingData[1],
-          totalAmount: window.ethers.utils.formatUnits(vestingData[2], 6),
-          totalClaimed: window.ethers.utils.formatUnits(vestingData[3], 6),
-          tokensOTCed: window.ethers.utils.formatUnits(vestingData[4], 6),
-          totalUsdtReceived: window.ethers.utils.formatUnits(vestingData[5], 6),
-          availableTokens: window.ethers.utils.formatUnits(vestingData[6], 6),
-          claimableNow: window.ethers.utils.formatUnits(vestingData[7], 6),
-          monthsClaimed: vestingData[8].toNumber(),
-          monthsVested: vestingData[9].toNumber(),
-          nextClaimTime: vestingData[10].toNumber(),
-          initialLockDuration: vestingData[11].toNumber(),
-        });
+        // Handle current contract format (10 elements) vs updated format (12 elements)
+        if (vestingData.length === 12) {
+          // Updated contract format: [initialized, established, totalAmount, totalClaimed, tokensOTCed, totalUsdtReceived, availableTokens, claimableNow, monthsClaimed, monthsVested, nextClaimTime, initialLockDuration]
+          setVestingStatus({
+            initialized: vestingData[0],
+            established: vestingData[1],
+            totalAmount: window.ethers.utils.formatUnits(vestingData[2] || 0, 6),
+            totalClaimed: window.ethers.utils.formatUnits(vestingData[3] || 0, 6),
+            tokensOTCed: window.ethers.utils.formatUnits(vestingData[4] || 0, 6),
+            totalUsdtReceived: window.ethers.utils.formatUnits(vestingData[5] || 0, 6),
+            availableTokens: window.ethers.utils.formatUnits(vestingData[6] || 0, 6),
+            claimableNow: window.ethers.utils.formatUnits(vestingData[7] || 0, 6),
+            monthsClaimed: vestingData[8] ? vestingData[8].toNumber() : 0,
+            monthsVested: vestingData[9] ? vestingData[9].toNumber() : 0,
+            nextClaimTime: vestingData[10] ? vestingData[10].toNumber() : 0,
+            initialLockDuration: vestingData[11] ? vestingData[11].toNumber() : 0,
+          });
+        } else if (vestingData.length === 10) {
+          // Current contract format: [initialized, totalAmount, totalClaimed, tokensOTCed, totalUsdtReceived, availableTokens, claimableNow, monthsClaimed, monthsVested, nextClaimTime]
+          setVestingStatus({
+            initialized: vestingData[0],
+            established: parseFloat(window.ethers.utils.formatUnits(vestingData[1] || 0, 6)) > 0, // If has totalAmount, it's established
+            totalAmount: window.ethers.utils.formatUnits(vestingData[1] || 0, 6),
+            totalClaimed: window.ethers.utils.formatUnits(vestingData[2] || 0, 6),
+            tokensOTCed: window.ethers.utils.formatUnits(vestingData[3] || 0, 6),
+            totalUsdtReceived: window.ethers.utils.formatUnits(vestingData[4] || 0, 6),
+            availableTokens: window.ethers.utils.formatUnits(vestingData[5] || 0, 6),
+            claimableNow: window.ethers.utils.formatUnits(vestingData[6] || 0, 6),
+            monthsClaimed: vestingData[7] ? vestingData[7].toNumber() : 0,
+            monthsVested: vestingData[8] ? vestingData[8].toNumber() : 0,
+            nextClaimTime: vestingData[9] ? vestingData[9].toNumber() : 0,
+            initialLockDuration: 0, // Not available in current contract
+          });
+        } else {
+          throw new Error(`Unexpected array length: ${vestingData.length}`);
+        }
       } catch (vestingError) {
         console.error('Error fetching vesting data:', vestingError);
         // Set default vesting status if user hasn't initialized
