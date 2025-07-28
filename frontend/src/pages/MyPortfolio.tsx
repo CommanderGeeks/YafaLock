@@ -35,16 +35,15 @@ export const MyPortfolio: React.FC = () => {
   };
 
   // Helper function to format currency
-  // Add this helper function near your existing formatNumber function:
-const formatCurrency = (value: string | number, decimals: number = 2): string => {
-  if (!value || value === '0' || value === 0) return '$0.00';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (num < 0.01) return '< $0.01';
-  return `$${num.toLocaleString(undefined, { 
-    minimumFractionDigits: 2,
-    maximumFractionDigits: decimals 
-  })}`;
-};
+  const formatCurrency = (value: string | number, decimals: number = 2): string => {
+    if (!value || value === '0' || value === 0) return '$0.00';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (num < 0.01) return '< $0.01';
+    return `$${num.toLocaleString(undefined, { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: decimals 
+    })}`;
+  };
 
   // Load user's community offer
   const loadMyOffer = async () => {
@@ -55,7 +54,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
       const offerData = await web3State.contract.getCommunityMemberOffer(web3State.account);
       console.log('My offer data:', offerData);
       
-      // Handle array response - [offerer, usdtAmount, tokenAmount, active]
       if (offerData[3]) { // if active
         setMyOffer({
           offerer: offerData[0],
@@ -74,7 +72,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
     }
   };
 
-  // Load my offer when component mounts or wallet changes
   useEffect(() => {
     if (web3State.connected && vestingStatus?.initialized) {
       loadMyOffer();
@@ -95,7 +92,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
     }
   };
 
-  // Helper function to format duration
   const formatDuration = (seconds: number): string => {
     if (seconds === 0) return 'No duration set';
     
@@ -216,7 +212,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
 
   // Lock available but not initialized
   if (vestingStatus.established && !vestingStatus.initialized) {
-    // We need to get the raw vesting info to show lock details
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
@@ -247,7 +242,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
             </div>
 
             <div className="space-y-6">
-              {/* Allocation Details */}
               <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                   <Info className="w-5 h-5 mr-2 text-emerald-400" />
@@ -280,33 +274,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
                 </div>
               </div>
 
-              {/* What Happens Next */}
-              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-emerald-400" />
-                  What Happens When You Initialize
-                </h3>
-                <div className="space-y-3 text-sm text-gray-300">
-                  <div className="flex items-start space-x-3">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                    <p>Your vesting schedule will begin immediately</p>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                    <p>Tokens will unlock monthly over {vestingStatus.monthsVested} months</p>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                    <p>You can participate in OTC trading opportunities</p>
-                  </div>
-                  <div className="flex items-start space-x-3">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                    <p>This action cannot be undone once confirmed</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Initialize Button */}
               <div className="pt-4">
                 <TransactionButton 
                   onClick={handleInitializeLock}
@@ -346,7 +313,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
         </TransactionButton>
       </div>
 
-      {/* Portfolio Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Allocation"
@@ -377,11 +343,9 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Vesting Progress */}
         <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <h3 className="text-xl font-semibold text-white mb-4">Vesting Progress</h3>
           
-          {/* Progress Bar */}
           <div className="mb-6">
             <div className="flex justify-between text-sm text-gray-400 mb-2">
               <span>Progress</span>
@@ -402,7 +366,6 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
             </div>
           </div>
 
-          {/* Claim Section */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <div>
@@ -427,151 +390,73 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
           </div>
         </div>
 
-        {/* My Active OTC Offer */}
         <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-white">My Active OTC Offer</h3>
-            {loadingMyOffer && (
-              <RefreshCw className="w-5 h-5 animate-spin text-emerald-400" />
-            )}
+            <h3 className="text-xl font-semibold text-white">OTC Opportunities</h3>
+            <button 
+              onClick={() => setShowCreateOffer(true)}
+              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Place an OTC Offer to The Yafa Foundation</span>
+            </button>
           </div>
 
-          {myOffer ? (
-            <div className="space-y-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+          {myOffer && (
+            <div className="mb-6">
+              <div className="bg-gray-700/30 border border-emerald-500/30 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-emerald-300">Active Offer</h4>
-                  <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded-full text-emerald-300">
+                  <h4 className="font-semibold text-white">Active Offer</h4>
+                  <span className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-300 rounded-full">
                     Live
                   </span>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
                     <p className="text-sm text-gray-400">Offering</p>
-                    <p className="text-lg font-semibold text-white">{formatNumber(myOffer.tokenAmount)} YAFA</p>
+                    <p className="text-white font-semibold">{formatNumber(myOffer.tokenAmount)} YAFA</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-400">Asking Price</p>
                     <p className="text-lg font-semibold text-emerald-400">{formatCurrency(myOffer.usdtAmount)}</p>
                   </div>
                 </div>
-
                 <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3 mb-4">
                   <div className="text-sm text-gray-300">
                     <p className="mb-1">Rate: {formatCurrency((parseFloat(myOffer.usdtAmount) / parseFloat(myOffer.tokenAmount)).toString())} per YAFA</p>
                     <p className="text-xs text-gray-400">Your offer is visible to the Yafa Foundation</p>
                   </div>
                 </div>
-
                 <div className="flex space-x-3">
                   <button 
-                    onClick={() => loadMyOffer()}
+                    onClick={loadMyOffer}
                     disabled={loadingMyOffer}
                     className="flex-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-200 border border-gray-600/30 py-2 px-4 rounded-full transition-colors backdrop-blur-sm text-sm"
                   >
-                    Refresh Status
+                    {loadingMyOffer ? 'Refreshing...' : 'Refresh Status'}
                   </button>
                   <TransactionButton 
                     onClick={handleRevokeOffer}
                     variant="warning"
-                    className="flex-1"
+                    className="flex-1 text-sm py-2"
                   >
                     Revoke Offer
                   </TransactionButton>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <DollarSign className="w-12 h-12 mx-auto text-gray-500 mb-4 opacity-50" />
-              <p className="text-gray-400 mb-2">No active OTC offer</p>
-              <p className="text-sm text-gray-500 mb-4">Create an offer to sell your tokens to the Yafa Foundation</p>
-              <button 
-                onClick={() => setShowCreateOffer(true)}
-                className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-6 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)]"
-              >
-                Create OTC Offer
-              </button>
-            </div>
           )}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Vesting Progress */}
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
-          <h3 className="text-xl font-semibold text-white mb-4">Vesting Progress</h3>
-          
-          {/* Progress Bar */}
-          <div className="mb-6">
-            <div className="flex justify-between text-sm text-gray-400 mb-2">
-              <span>Progress</span>
-              <span>{vestingStatus.monthsClaimed}/{vestingStatus.monthsVested} months</span>
-            </div>
-            <div className="w-full bg-gray-700/50 rounded-full h-3">
-              <div 
-                className="bg-emerald-500 h-3 rounded-full transition-all duration-300"
-                style={{
-                  width: `${vestingStatus.monthsVested > 0 ? (vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100 : 0}%`
-                }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>Started</span>
-              <span>{vestingStatus.monthsVested > 0 ? Math.round((vestingStatus.monthsClaimed / vestingStatus.monthsVested) * 100) : 0}%</span>
-              <span>Complete</span>
-            </div>
-          </div>
-
-          {/* Claim Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-400">Available to Claim</p>
-                <p className="text-2xl font-bold text-white">{formatNumber(vestingStatus.claimableNow)} YAFA</p>
-              </div>
-              <TransactionButton 
-                onClick={handleClaimVested}
-                disabled={parseFloat(vestingStatus.claimableNow) === 0}
-                variant="success"
-              >
-                Claim Tokens
-              </TransactionButton>
-            </div>
-
-            {vestingStatus.nextClaimTime > 0 && (
-              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3">
-                <p className="text-sm text-gray-400 mb-1">Next Claim Available</p>
-                <Countdown targetTimestamp={vestingStatus.nextClaimTime} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* OTC Opportunities */}
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-white">OTC Opportunities</h3>
-            <button 
-              onClick={() => setShowCreateOffer(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm"
-            >
-              Place an OTC Offer to The Yafa Foundation
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {/* Private Offer */}
-            {privateOffer?.active && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+          {privateOffer?.active && (
+            <div className="mb-6">
+              <div className="bg-gray-700/30 border border-blue-500/30 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-emerald-300">Private Offer</h4>
-                  <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded-full text-emerald-300">
-                    Active
+                  <h4 className="font-semibold text-white">Private Offer</h4>
+                  <span className="px-2 py-1 text-xs bg-blue-500/20 text-blue-300 rounded-full">
+                    Exclusive
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <p className="text-gray-400">You Give</p>
                     <p className="text-white font-semibold">{formatNumber(privateOffer.tokenAmount)} YAFA</p>
@@ -586,17 +471,18 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
                 </div>
                 <TransactionButton 
                   onClick={handleAcceptPrivateOffer}
-                  variant="success"
+                  variant="primary"
                   className="w-full"
                 >
                   Accept Private Offer
                 </TransactionButton>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Public Offer */}
-            {publicOffer?.active && (
-              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
+          {publicOffer?.active && (
+            <div className="mb-6">
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4 mb-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-white">Public Offer</h4>
                   <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded-full text-emerald-300">
@@ -627,42 +513,18 @@ const formatCurrency = (value: string | number, decimals: number = 2): string =>
                   Participate in Offer
                 </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {!privateOffer?.active && !publicOffer?.active && (
-              <div className="text-center py-8 text-gray-400">
-                <p>No active OTC offers available</p>
-                <p className="text-sm mt-2">Create a community offer to sell your tokens</p>
-              </div>
-            )}
-          </div>
+          {!privateOffer?.active && !publicOffer?.active && !myOffer && (
+            <div className="text-center py-8 text-gray-400">
+              <p>No active OTC offers available</p>
+              <p className="text-sm mt-2">Create a community offer to sell your tokens</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Portfolio Summary */}
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
-        <h3 className="text-xl font-semibold text-white mb-4">Portfolio Summary</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div>
-            <p className="text-sm text-gray-400 mb-1">Total Allocated</p>
-            <p className="text-lg font-semibold text-white">{formatNumber(vestingStatus.totalAmount)} YAFA</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-400 mb-1">Sold via OTC</p>
-            <p className="text-lg font-semibold text-orange-400">{formatNumber(vestingStatus.tokensOTCed)} YAFA</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-400 mb-1">Available</p>
-            <p className="text-lg font-semibold text-emerald-400">{formatNumber(vestingStatus.availableTokens)} YAFA</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-400 mb-1">Total USDT Earned</p>
-            <p className="text-lg font-semibold text-emerald-400">{formatCurrency(vestingStatus.totalUsdtReceived)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
       <CreateOfferModal 
         isOpen={showCreateOffer}
         onClose={() => setShowCreateOffer(false)}
