@@ -42,6 +42,13 @@ export interface CommunityMemberOffer {
   active: boolean;
 }
 
+export interface OTCStats {
+  totalUsdtSpent: string;
+  totalTokensAcquired: string;
+  contractTokenBalance: string;
+  contractUsdtBalance: string;
+}
+
 export interface Web3State {
   account: string | null;
   connected: boolean;
@@ -57,6 +64,7 @@ export interface Web3ContextType {
   vestingStatus: VestingStatus | null;
   publicOffer: PublicOffer | null;
   privateOffer: PrivateOffer | null;
+  otcStats: OTCStats | null;
   loading: boolean;
   error: string | null;
 }

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { CONTRACT_CONFIG, YAFA_LOCK_ABI } from '../config/contracts';
-import type { Web3ContextType, Web3State, VestingStatus, PublicOffer, PrivateOffer } from '../types/contracts';
+import type { Web3ContextType, Web3State, VestingStatus, PublicOffer, PrivateOffer, OTCStats } from '../types/contracts';
 
 // Create the context
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -21,6 +21,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [vestingStatus, setVestingStatus] = useState<VestingStatus | null>(null);
   const [publicOffer, setPublicOffer] = useState<PublicOffer | null>(null);
   const [privateOffer, setPrivateOffer] = useState<PrivateOffer | null>(null);
+  const [otcStats, setOtcStats] = useState<OTCStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,37 +95,22 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setLoading(true);
       console.log('Refreshing contract data for account:', account);
       
-      // Get vesting status using the actual contract method
+      // Get vesting status using the new getter method
       try {
-        const vestingData = await contract.vestingInfo(account);
+        const vestingData = await contract.getVestingStatus(account);
         console.log('Raw vesting data:', vestingData);
-        
-        // Calculate derived values
-        const totalAmount = vestingData.totalAmount;
-        const monthsVested = vestingData.monthsVested;
-        const monthsClaimed = vestingData.monthsClaimed;
-        const totalClaimed = vestingData.totalClaimed;
-        const tokensOTCed = vestingData.tokensOTCed;
-        const totalUsdtReceived = vestingData.totalUsdtReceived;
-        
-        // Calculate available and claimable tokens
-        // This logic should match your smart contract's calculation
-        const currentTime = Math.floor(Date.now() / 1000);
-        const monthsSinceStart = monthsVested.toNumber();
-        const availableForClaim = monthsSinceStart > monthsClaimed.toNumber() ? 
-          totalAmount.div(24).mul(monthsSinceStart - monthsClaimed.toNumber()) : 0;
         
         setVestingStatus({
           initialized: vestingData.initialized,
-          totalAmount: window.ethers.utils.formatUnits(totalAmount, 18),
-          totalClaimed: window.ethers.utils.formatUnits(totalClaimed, 18),
-          tokensOTCed: window.ethers.utils.formatUnits(tokensOTCed, 18),
-          totalUsdtReceived: window.ethers.utils.formatUnits(totalUsdtReceived, 6),
-          availableTokens: window.ethers.utils.formatUnits(totalAmount.sub(totalClaimed).sub(tokensOTCed), 18),
-          claimableNow: window.ethers.utils.formatUnits(availableForClaim, 18),
-          monthsClaimed: monthsClaimed.toNumber(),
-          monthsVested: monthsVested.toNumber(),
-          nextClaimTime: vestingData.initialLockTime.toNumber() + ((monthsClaimed.toNumber() + 1) * 30 * 24 * 60 * 60), // Rough calculation
+          totalAmount: window.ethers.utils.formatUnits(vestingData.totalAmount, 18),
+          totalClaimed: window.ethers.utils.formatUnits(vestingData.totalClaimed, 18),
+          tokensOTCed: window.ethers.utils.formatUnits(vestingData.tokensOTCed, 18),
+          totalUsdtReceived: window.ethers.utils.formatUnits(vestingData.totalUsdtReceived, 6),
+          availableTokens: window.ethers.utils.formatUnits(vestingData.availableTokens, 18),
+          claimableNow: window.ethers.utils.formatUnits(vestingData.claimableNow, 18),
+          monthsClaimed: vestingData.monthsClaimed.toNumber(),
+          monthsVested: vestingData.monthsVested.toNumber(),
+          nextClaimTime: vestingData.nextClaimTime.toNumber(),
         });
       } catch (vestingError) {
         console.error('Error fetching vesting data:', vestingError);
@@ -143,14 +129,10 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         });
       }
       
-      // Get public offer using the actual contract method
+      // Get public offer using the new getter method
       try {
-        const publicOfferData = await contract.publicOffer();
+        const publicOfferData = await contract.getPublicOffer();
         console.log('Raw public offer data:', publicOfferData);
-        
-        const currentTime = Math.floor(Date.now() / 1000);
-        const timeRemaining = Math.max(0, publicOfferData.offerStartTime.toNumber() + publicOfferData.offerDuration.toNumber() - currentTime);
-        const expired = timeRemaining === 0;
         
         setPublicOffer({
           totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.totalUsdtAmount, 6),
@@ -159,9 +141,9 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
           remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 18),
           offerDuration: publicOfferData.offerDuration.toNumber(),
           offerStartTime: publicOfferData.offerStartTime.toNumber(),
-          timeRemaining,
-          active: publicOfferData.active && !expired,
-          expired,
+          timeRemaining: publicOfferData.timeRemaining.toNumber(),
+          active: publicOfferData.active,
+          expired: publicOfferData.expired,
         });
       } catch (publicOfferError) {
         console.error('Error fetching public offer:', publicOfferError);
@@ -178,18 +160,55 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         });
       }
       
-      // Note: Private offers might need to be fetched differently
-      // since there's no direct getter in the contract
-      setPrivateOffer({
-        recipient: '',
-        usdtAmount: '0',
-        tokenAmount: '0',
-        offerDuration: 0,
-        offerStartTime: 0,
-        timeRemaining: 0,
-        active: false,
-        expired: true,
-      });
+      // Get private offer using the new getter method
+      try {
+        const privateOfferData = await contract.getPrivateOffer(account);
+        console.log('Raw private offer data:', privateOfferData);
+        
+        setPrivateOffer({
+          recipient: privateOfferData.recipient,
+          usdtAmount: window.ethers.utils.formatUnits(privateOfferData.usdtAmount, 6),
+          tokenAmount: window.ethers.utils.formatUnits(privateOfferData.tokenAmount, 18),
+          offerDuration: privateOfferData.offerDuration.toNumber(),
+          offerStartTime: privateOfferData.offerStartTime.toNumber(),
+          timeRemaining: privateOfferData.timeRemaining.toNumber(),
+          active: privateOfferData.active,
+          expired: privateOfferData.expired,
+        });
+      } catch (privateOfferError) {
+        console.error('Error fetching private offer:', privateOfferError);
+        setPrivateOffer({
+          recipient: '',
+          usdtAmount: '0',
+          tokenAmount: '0',
+          offerDuration: 0,
+          offerStartTime: 0,
+          timeRemaining: 0,
+          active: false,
+          expired: true,
+        });
+      }
+
+      // Get OTC statistics using the new getter method
+      try {
+        const otcStatsData = await contract.getOTCStats();
+        console.log('Raw OTC stats data:', otcStatsData);
+        
+        setOtcStats({
+          totalUsdtSpent: window.ethers.utils.formatUnits(otcStatsData.totalUsdtSpent, 6),
+          totalTokensAcquired: window.ethers.utils.formatUnits(otcStatsData.totalTokensAcquired, 18),
+          contractTokenBalance: window.ethers.utils.formatUnits(otcStatsData.contractTokenBalance, 18),
+          contractUsdtBalance: window.ethers.utils.formatUnits(otcStatsData.contractUsdtBalance, 6),
+        });
+      } catch (otcStatsError) {
+        console.error('Error fetching OTC stats:', otcStatsError);
+        setOtcStats({
+          totalUsdtSpent: '0',
+          totalTokensAcquired: '0',
+          contractTokenBalance: '0',
+          contractUsdtBalance: '0',
+        });
+      }
       
     } catch (err: any) {
       console.error('Error refreshing data:', err);
@@ -221,6 +240,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
           setVestingStatus(null);
           setPublicOffer(null);
           setPrivateOffer(null);
+          setOtcStats(null);
         } else {
           // Account changed
           connectWallet();
@@ -269,6 +289,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     vestingStatus,
     publicOffer,
     privateOffer,
+    otcStats,
     loading,
     error,
   };
