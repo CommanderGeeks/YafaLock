@@ -67,6 +67,8 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
     event PublicOfferCreated(uint256 totalUsdtAmount, uint256 totalTokenAmount, uint256 duration);
     event PublicOfferAccepted(address indexed user, uint256 usdtAmount, uint256 tokenAmount, uint256 percentage);
     event PublicOfferRevoked(uint256 refundedUsdt, uint256 refundedTokens);
+    event PrivateOfferCreated(address indexed recipient, uint256 usdtAmount, uint256 tokenAmount, uint256 duration);
+    event PrivateOfferAccepted(address indexed user, uint256 usdtAmount, uint256 tokenAmount);
     event OfferExpired(string offerType);
     
     constructor(
@@ -114,6 +116,8 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
                     initialized: false
                 });
             }
+            
+            remainingVestedPeople += len;
     }
 
     function lock() external nonReentrant {
@@ -173,6 +177,10 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         if (info.monthsClaimed + claimableMonths >= info.monthsVested) {
             // On final claim, give all remaining tokens
             tokensToClaim = baseAmount - info.totalClaimed;
+            // User has completed vesting, decrease remaining people count
+            if (remainingVestedPeople > 0) {
+                remainingVestedPeople--;
+            }
         }
         
         // Ensure we don't exceed limits
@@ -198,7 +206,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         VestingInfo storage info = vestingInfo[msg.sender];
 
         require(info.initialized, "Vesting not initialized");
-        require(info.totalAmount - info.totalClaimed >= _tokenAmt, "not enough tokens to place this offer");
+        require(getUserAvailableTokens(msg.sender) >= _tokenAmt, "not enough tokens to place this offer");
         
         CommunityMemberOTCOffer storage offer = communityMemberOffers[msg.sender];
 
@@ -226,12 +234,12 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         uint256 tokensToTransfer = (offer.tokenAmount * _percentage) / 100;
 
         // Validate sufficient tokens are available (not yet claimed or OTCed)
-        uint256 availableTokens = info.totalAmount - info.totalClaimed - info.tokensOTCed;
+        uint256 availableTokens = getUserAvailableTokens(_user);
         require(availableTokens >= tokensToTransfer, "Insufficient available tokens");
 
         // Transfer USDT from contract to the vested individual
         require(
-            usdt.transferFrom(address(this), _user, usdtToTransfer),
+            usdt.transferFrom(owner(), _user, usdtToTransfer),
             "USDT transfer to user failed"
         );
 
@@ -296,7 +304,6 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         require(publicOffer.active, "No active public offer to revoke");
 
         uint256 refundUsdt = publicOffer.remainingUsdtAmount;
-        uint256 refundTokens = publicOffer.remainingTokenAmount;
 
         // Refund remaining USDT to project
         if (refundUsdt > 0) {
@@ -315,7 +322,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         publicOffer.offerStartTime = 0;
         publicOffer.active = false;
 
-        emit PublicOfferRevoked(refundUsdt, refundTokens);
+        emit PublicOfferRevoked(refundUsdt, 0);
     }
 
     function acceptPublicOTC(uint256 _percentage) external nonReentrant {
@@ -331,7 +338,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         uint256 tokensToGive = (publicOffer.remainingTokenAmount * _percentage) / 100;
 
         // Validate user has enough tokens available
-        uint256 availableTokens = info.totalAmount - info.totalClaimed - info.tokensOTCed;
+        uint256 availableTokens = getUserAvailableTokens(msg.sender);
         require(availableTokens >= tokensToGive, "Insufficient available tokens");
 
         // Validate contract has enough USDT
@@ -372,6 +379,10 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         require(_usdtAmt > 0, "USDT amount must be greater than 0");
         require(_duration > 0, "Duration must be greater than 0");
 
+        VestingInfo storage info = vestingInfo[_recipient];
+        require(info.initialized, "Recipient vesting not initialized");
+        require(getUserAvailableTokens(_recipient) >= _tokenAmt, "Recipient doesn't have enough tokens");
+
         PrivateOTCOffer storage offer = privateOffers[_recipient];
         
         offer.recipient = _recipient;
@@ -380,29 +391,43 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         offer.offerDuration = _duration;
         offer.offerStartTime = block.timestamp;
         offer.active = true;
+
+        emit PrivateOfferCreated(_recipient, _usdtAmt, _tokenAmt, _duration);
     }
 
     function acceptPrivateOTC() external nonReentrant {
         PrivateOTCOffer storage offer = privateOffers[msg.sender];
+        VestingInfo storage info = vestingInfo[msg.sender];
         
         require(offer.active, "No active private offer for you");
         require(offer.recipient == msg.sender, "Offer not for you");
         require(block.timestamp <= offer.offerStartTime + offer.offerDuration, "Offer expired");
 
-        // Transfer USDT from user to contract
+        // Validate user has enough tokens available
+        uint256 availableTokens = getUserAvailableTokens(msg.sender);
+        require(availableTokens >= offer.tokenAmount, "Insufficient available tokens");
+
+        // Transfer USDT from project to user
         require(
-            usdt.transferFrom(msg.sender, address(this), offer.usdtAmount),
+            usdt.transferFrom(owner(), msg.sender, offer.usdtAmount),
             "USDT transfer failed"
         );
 
-        // Transfer tokens from contract to user
+        // Transfer tokens from contract to project
         require(
-            token.transfer(msg.sender, offer.tokenAmount),
+            token.transfer(owner(), offer.tokenAmount),
             "Token transfer failed"
         );
 
+        // Update user's vesting info
+        info.tokensOTCed += offer.tokenAmount;
+        info.totalUsdtReceived += offer.usdtAmount;
+        info.totalPendingTokens -= offer.tokenAmount;
+
         // Deactivate offer after acceptance
         offer.active = false;
+
+        emit PrivateOfferAccepted(msg.sender, offer.usdtAmount, offer.tokenAmount);
     }
 
     function revokePrivateOTC(address _recipient) external onlyOwner nonReentrant {
@@ -419,6 +444,122 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         VestingInfo storage info = vestingInfo[_user];
         return info.totalAmount - info.totalClaimed - info.tokensOTCed;
     }
+
+    /**
+     * @dev Get claimable tokens for a user right now
+     */
+    function getClaimableTokens(address _user) public view returns (uint256) {
+        VestingInfo storage info = vestingInfo[_user];
+        
+        if (!info.initialized || info.totalClaimed >= info.totalAmount) {
+            return 0;
+        }
+
+        // Check if initial lock period has passed
+        if (block.timestamp < info.initialLockTime + info.initialLockDuration) {
+            return 0;
+        }
+
+        // Calculate months elapsed since initial lock ended
+        uint256 lockEndTime = info.initialLockTime + info.initialLockDuration;
+        uint256 monthsElapsed = (block.timestamp - lockEndTime) / 30 days;
+        
+        // Can't claim beyond total vesting period
+        if (monthsElapsed > info.monthsVested) {
+            monthsElapsed = info.monthsVested;
+        }
+        
+        // Calculate claimable months (months elapsed minus already claimed)
+        uint256 claimableMonths = monthsElapsed - info.monthsClaimed;
+        
+        if (claimableMonths == 0) {
+            return 0;
+        }
+        
+        // Calculate base amount after OTC sales
+        uint256 baseAmount = info.totalAmount - info.tokensOTCed;
+        
+        // Calculate monthly allowance based on remaining base amount
+        uint256 monthlyAllowance = baseAmount / info.monthsVested;
+        
+        // Calculate tokens to claim
+        uint256 tokensToClaim = claimableMonths * monthlyAllowance;
+        
+        // Handle final month rounding
+        if (info.monthsClaimed + claimableMonths >= info.monthsVested) {
+            // On final claim, give all remaining tokens
+            tokensToClaim = baseAmount - info.totalClaimed;
+        }
+        
+        return tokensToClaim;
+    }
+
+    /**
+     * @dev Get total claimable tokens across all users
+     */
+    function getTotalClaimableTokens() external view returns (uint256) {
+        // Note: This function would be expensive for many users in production
+        // Consider implementing with events or off-chain indexing for scalability
+        uint256 totalClaimable = 0;
+        
+        // Since we can't iterate over all users in the mapping directly,
+        // this function would need to be called with a list of addresses
+        // or implemented differently. For now, returning 0 as placeholder.
+        return totalClaimable;
+    }
+
+    /**
+     * @dev Get next claim time for a user
+     */
+    function getNextClaimTime(address _user) external view returns (uint256) {
+        VestingInfo storage info = vestingInfo[_user];
+        
+        if (!info.initialized) {
+            return 0;
+        }
+
+        // If initial lock period hasn't passed yet
+        uint256 initialUnlockTime = info.initialLockTime + info.initialLockDuration;
+        if (block.timestamp < initialUnlockTime) {
+            return initialUnlockTime;
+        }
+
+        // If all tokens are claimed
+        if (info.monthsClaimed >= info.monthsVested || info.totalClaimed >= (info.totalAmount - info.tokensOTCed)) {
+            return 0; // No more claims available
+        }
+
+        // Next claim time is the next month after the last claim
+        uint256 nextClaimMonth = info.monthsClaimed + 1;
+        return initialUnlockTime + (nextClaimMonth * 30 days);
+    }
+
+    /**
+     * @dev Get private offer for a specific user
+     */
+    function getPrivateOffer(address _user) external view returns (
+        address recipient,
+        uint256 usdtAmount,
+        uint256 tokenAmount,
+        uint256 offerDuration,
+        uint256 offerStartTime,
+        uint256 timeRemaining,
+        bool active,
+        bool expired
+    ) {
+        PrivateOTCOffer storage offer = privateOffers[_user];
+        
+        recipient = offer.recipient;
+        usdtAmount = offer.usdtAmount;
+        tokenAmount = offer.tokenAmount;
+        offerDuration = offer.offerDuration;
+        offerStartTime = offer.offerStartTime;
+        
+        uint256 endTime = offerStartTime + offerDuration;
+        timeRemaining = endTime > block.timestamp ? endTime - block.timestamp : 0;
+        active = offer.active;
+        expired = block.timestamp > endTime;
+    }
     
     /**
      * @dev Get vesting status and details for a user
@@ -430,8 +571,10 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         uint256 tokensOTCed,
         uint256 totalUsdtReceived,
         uint256 availableTokens,
+        uint256 claimableNow,
         uint256 monthsClaimed,
-        uint256 monthsVested
+        uint256 monthsVested,
+        uint256 nextClaimTime
     ) {
         VestingInfo storage info = vestingInfo[_user];
         
@@ -440,9 +583,25 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         totalClaimed = info.totalClaimed;
         tokensOTCed = info.tokensOTCed;
         totalUsdtReceived = info.totalUsdtReceived;
-        availableTokens = getAvailableTokens(_user);
+        availableTokens = getUserAvailableTokens(_user);
+        claimableNow = getClaimableTokens(_user);
         monthsClaimed = info.monthsClaimed;
         monthsVested = info.monthsVested;
+        
+        // Calculate next claim time
+        if (!info.initialized) {
+            nextClaimTime = 0;
+        } else {
+            uint256 initialUnlockTime = info.initialLockTime + info.initialLockDuration;
+            if (block.timestamp < initialUnlockTime) {
+                nextClaimTime = initialUnlockTime;
+            } else if (info.monthsClaimed >= info.monthsVested || info.totalClaimed >= (info.totalAmount - info.tokensOTCed)) {
+                nextClaimTime = 0;
+            } else {
+                uint256 nextClaimMonth = info.monthsClaimed + 1;
+                nextClaimTime = initialUnlockTime + (nextClaimMonth * 30 days);
+            }
+        }
     }
     
     /**
@@ -471,6 +630,10 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         active = publicOffer.active;
         expired = block.timestamp > endTime;
     }
+
+    /**
+     * @dev Get community member offer details
+     */
     function getCommunityMemberOffer(address _user) external view returns (
         address offerer,
         uint256 usdtAmount,
@@ -483,6 +646,22 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         usdtAmount = offer.usdtAmount;
         tokenAmount = offer.tokenAmount;
         active = offer.active;
+    }
+
+    /**
+     * @dev Get all active offers (simplified version - in production, use events for better gas efficiency)
+     */
+    function getAllActiveOffers() external view returns (
+        bool publicOfferActive,
+        uint256 publicOfferUsdt,
+        uint256 publicOfferTokens
+    ) {
+        publicOfferActive = publicOffer.active;
+        publicOfferUsdt = publicOffer.remainingUsdtAmount;
+        publicOfferTokens = publicOffer.remainingTokenAmount;
+        
+        // Note: For community and private offers, you'd need to implement
+        // an enumerable system or use events for indexing in production
     }
     
     /**
