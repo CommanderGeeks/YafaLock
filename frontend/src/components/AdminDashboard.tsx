@@ -1,3 +1,5 @@
+// Updated AdminDashboard component
+
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
@@ -14,10 +16,10 @@ import { StatCard, TransactionButton } from '../components/shared';
 import { CreatePublicOfferModal } from '../components/modals';
 
 interface CommunityOffer {
-  offerer: string;
+  user: string;
   usdtAmount: string;
   tokenAmount: string;
-  active: boolean;
+  pricePerToken: number;
 }
 
 export const AdminDashboard: React.FC = () => {
@@ -26,6 +28,9 @@ export const AdminDashboard: React.FC = () => {
   const [communityOffers, setCommunityOffers] = useState<CommunityOffer[]>([]);
   const [showCreatePublicOffer, setShowCreatePublicOffer] = useState(false);
   const [loadingOffers, setLoadingOffers] = useState(false);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState<CommunityOffer | null>(null);
+  const [acceptPercentage, setAcceptPercentage] = useState(100);
 
   // Check if connected wallet is the contract owner
   useEffect(() => {
@@ -44,42 +49,65 @@ export const AdminDashboard: React.FC = () => {
     checkOwnership();
   }, [web3State.contract, web3State.account]);
 
-  // Load community offers (you'd need to implement this via events or other method)
+  // Load community offers using the new contract function
   const loadCommunityOffers = async () => {
     if (!web3State.contract) return;
     
     setLoadingOffers(true);
     try {
-      // Note: This would require implementing a way to get all active offers
-      // For now, this is a placeholder - you'd need to either:
-      // 1. Add a function to get all active offers to the contract
-      // 2. Use event filtering to get all CommunityMemberOfferCreated events
-      // 3. Maintain an off-chain index
+      // Call the new getAllActiveOffers function
+      const activeOffers = await web3State.contract.getAllActiveOffers();
+      console.log('Raw active offers:', activeOffers);
       
-      // Placeholder for now
-      setCommunityOffers([]);
+      // Transform the data and calculate price per token, then sort by price
+      const formattedOffers: CommunityOffer[] = activeOffers.map((offer: any) => {
+        const usdtAmount = window.ethers.utils.formatUnits(offer.usdtAmount, 6);
+        const tokenAmount = window.ethers.utils.formatUnits(offer.tokenAmount, 6);
+        const pricePerToken = parseFloat(usdtAmount) / parseFloat(tokenAmount);
+        
+        return {
+          user: offer.user,
+          usdtAmount,
+          tokenAmount,
+          pricePerToken
+        };
+              }).sort((a: CommunityOffer, b: CommunityOffer) => a.pricePerToken - b.pricePerToken); // Sort by price ascending (cheapest first)
+      
+      setCommunityOffers(formattedOffers);
     } catch (error) {
       console.error('Error loading community offers:', error);
+      setCommunityOffers([]);
     } finally {
       setLoadingOffers(false);
     }
   };
 
   useEffect(() => {
-    if (isOwner) {
+    if (isOwner && web3State.contract) {
       loadCommunityOffers();
     }
   }, [isOwner, web3State.contract]);
 
-  const handleAcceptCommunityOffer = async (userAddress: string, percentage: number): Promise<void> => {
+  const handleAcceptOffer = async (offer: CommunityOffer): Promise<void> => {
+    setSelectedOffer(offer);
+    setAcceptPercentage(100);
+    setShowAcceptModal(true);
+  };
+
+  const handleAcceptCommunityOffer = async (): Promise<void> => {
     try {
-      if (!web3State.contract) return;
+      if (!web3State.contract || !selectedOffer) return;
       
-      const tx = await web3State.contract.acceptCommunityMemberOTCOffer(userAddress, percentage);
+      const tx = await web3State.contract.acceptCommunityMemberOTCOffer(
+        selectedOffer.user, 
+        acceptPercentage
+      );
       await tx.wait();
       
       await loadCommunityOffers();
       await refreshData();
+      setShowAcceptModal(false);
+      setSelectedOffer(null);
     } catch (error) {
       console.error('Failed to accept community offer:', error);
     }
@@ -95,13 +123,13 @@ export const AdminDashboard: React.FC = () => {
     });
   };
 
-  const formatCurrency = (value: string, symbol: string = '$'): string => {
-    if (!value || value === '0') return `${symbol}0`;
-    const num = parseFloat(value);
+  const formatCurrency = (value: string | number, symbol: string = '$'): string => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!num || num === 0) return `${symbol}0`;
     if (num < 0.01) return `${symbol}< 0.01`;
     return `${symbol}${num.toLocaleString(undefined, { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2 
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4 
     })}`;
   };
 
@@ -165,7 +193,7 @@ export const AdminDashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Community Offers Management */}
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <div className="lg:col-span-2 bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-white">Community OTC Offers</h3>
             <button 
@@ -186,31 +214,27 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ) : (
               communityOffers.map((offer, index) => (
-                <div key={index} className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
+                <div key={`${offer.user}-${index}`} className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
                         <span className="text-xs text-white font-medium">
-                          {offer.offerer.slice(2, 4).toUpperCase()}
+                          {offer.user.slice(2, 4).toUpperCase()}
                         </span>
                       </div>
                       <div>
                         <p className="text-white font-medium">
-                          {offer.offerer.slice(0, 6)}...{offer.offerer.slice(-4)}
+                          {offer.user.slice(0, 6)}...{offer.user.slice(-4)}
                         </p>
                         <p className="text-xs text-gray-400">Community Member</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {offer.active && (
-                        <span className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-300 rounded-full">
-                          Active
-                        </span>
-                      )}
-                    </div>
+                    <span className="px-2 py-1 text-xs bg-emerald-500/20 text-emerald-300 rounded-full">
+                      Active
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-3 gap-4 mb-4">
                     <div>
                       <p className="text-xs text-gray-400">Offering</p>
                       <p className="text-white font-semibold">{formatNumber(offer.tokenAmount)} YAFA</p>
@@ -219,33 +243,21 @@ export const AdminDashboard: React.FC = () => {
                       <p className="text-xs text-gray-400">Asking</p>
                       <p className="text-emerald-400 font-semibold">{formatCurrency(offer.usdtAmount)}</p>
                     </div>
+                    <div>
+                      <p className="text-xs text-gray-400">Price per YAFA</p>
+                      <p className="text-yellow-400 font-semibold">{formatCurrency(offer.pricePerToken)}</p>
+                    </div>
                   </div>
 
-                  {offer.active && (
-                    <div className="flex space-x-2">
-                      <TransactionButton 
-                        onClick={() => handleAcceptCommunityOffer(offer.offerer, 25)}
-                        variant="secondary"
-                        className="flex-1 text-xs"
-                      >
-                        Accept 25%
-                      </TransactionButton>
-                      <TransactionButton 
-                        onClick={() => handleAcceptCommunityOffer(offer.offerer, 50)}
-                        variant="secondary"
-                        className="flex-1 text-xs"
-                      >
-                        Accept 50%
-                      </TransactionButton>
-                      <TransactionButton 
-                        onClick={() => handleAcceptCommunityOffer(offer.offerer, 100)}
-                        variant="success"
-                        className="flex-1 text-xs"
-                      >
-                        Accept All
-                      </TransactionButton>
-                    </div>
-                  )}
+                  <div className="flex space-x-2">
+                    <TransactionButton 
+                      onClick={() => handleAcceptOffer(offer)}
+                      variant="success"
+                      className="flex-1 text-xs py-2"
+                    >
+                      Accept Offer
+                    </TransactionButton>
+                  </div>
                 </div>
               ))
             )}
@@ -253,7 +265,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
 
         {/* Public Offer Management */}
-        <div className="bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <div className="lg:col-span-2 bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-white">Public OTC Offers</h3>
             <button 
@@ -274,6 +286,76 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Accept Offer Modal */}
+      {showAcceptModal && selectedOffer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800/90 backdrop-blur-md rounded-xl border border-gray-700/50 shadow-[0_8px_32px_rgba(0,0,0,0.6)] max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
+              <h2 className="text-xl font-semibold text-white">Accept Community Offer</h2>
+              <button 
+                onClick={() => setShowAcceptModal(false)}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-700/50"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
+                <h4 className="font-semibold text-white mb-2">Offer Details</h4>
+                <div className="text-sm text-gray-300 space-y-1">
+                  <p>From: {selectedOffer.user.slice(0, 6)}...{selectedOffer.user.slice(-4)}</p>
+                  <p>Offering: {formatNumber(selectedOffer.tokenAmount)} YAFA</p>
+                  <p>Asking: {formatCurrency(selectedOffer.usdtAmount)}</p>
+                  <p>Rate: {formatCurrency(selectedOffer.pricePerToken)} per YAFA</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Accept Percentage: {acceptPercentage}%
+                </label>
+                <input 
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={acceptPercentage}
+                  onChange={(e) => setAcceptPercentage(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>1%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
+                <h4 className="font-semibold text-white mb-2">Transaction Summary</h4>
+                <div className="text-sm text-gray-300 space-y-1">
+                  <p>You will receive: {formatNumber((parseFloat(selectedOffer.tokenAmount) * acceptPercentage / 100).toString())} YAFA</p>
+                  <p>You will pay: {formatCurrency((parseFloat(selectedOffer.usdtAmount) * acceptPercentage / 100).toString())}</p>
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button 
+                  onClick={() => setShowAcceptModal(false)}
+                  className="flex-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-200 border border-gray-600/30 py-3 px-4 rounded-full transition-colors backdrop-blur-sm"
+                >
+                  Cancel
+                </button>
+                <TransactionButton 
+                  onClick={handleAcceptCommunityOffer}
+                  variant="success"
+                  className="flex-1"
+                >
+                  Accept {acceptPercentage}%
+                </TransactionButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <CreatePublicOfferModal 

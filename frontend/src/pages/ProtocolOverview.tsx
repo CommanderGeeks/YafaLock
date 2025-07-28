@@ -42,7 +42,8 @@ export const ProtocolOverview: React.FC = () => {
         </div>
       </div>
       
-      <div className="grid grid-cols-2 gap-6 max-w-2xl">
+      {/* Updated: Changed from grid-cols-2 max-w-2xl to grid-cols-4 full width */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Supply Locked"
           value={otcStats ? `${formatNumber(otcStats.contractTokenBalance)} YAFA` : "Loading..."}
