@@ -35,6 +35,17 @@ export const MyPortfolio: React.FC = () => {
   };
 
   // Helper function to format currency
+  // Add this helper function near your existing formatNumber function:
+const formatCurrency = (value: string | number, decimals: number = 2): string => {
+  if (!value || value === '0' || value === 0) return '$0.00';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (num < 0.01) return '< $0.01';
+  return `$${num.toLocaleString(undefined, { 
+    minimumFractionDigits: 2,
+    maximumFractionDigits: decimals 
+  })}`;
+};
+
   // Load user's community offer
   const loadMyOffer = async () => {
     if (!web3State.contract || !web3State.account) return;

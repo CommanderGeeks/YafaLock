@@ -100,7 +100,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         const vestingData = await contract.getVestingStatus(account);
         console.log('Raw vesting data:', vestingData);
         console.log('Array length:', vestingData.length);
-        console.log('Array contents:', vestingData.map((item, index) => `[${index}]: ${item.toString()}`));
+        console.log('Array contents:', vestingData.map((item: any, index: number) => `[${index}]: ${item.toString()}`));
         
         // Handle current contract format (10 elements) vs updated format (12 elements)
         if (vestingData.length === 12) {

@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { TrendingUp, Wallet } from 'lucide-react';
+import { TrendingUp, Wallet, Shield } from 'lucide-react';
 import { Web3Provider } from './contexts/Web3Context';
 import { WalletConnect } from './components/WalletConnect';
 import { ProtocolOverview } from './pages/ProtocolOverview';
 import { MyPortfolio } from './pages/MyPortfolio';
+import { AdminDashboard } from './components/AdminDashboard';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'protocol' | 'portfolio'>('protocol');
+  const [currentView, setCurrentView] = useState<'protocol' | 'portfolio' | 'admin'>('protocol');
 
   const navigation = [
     { id: 'protocol' as const, label: 'Protocol Overview', icon: TrendingUp },
     { id: 'portfolio' as const, label: 'My Portfolio', icon: Wallet },
+    { id: 'admin' as const, label: 'Admin', icon: Shield },
   ];
 
   return (
@@ -55,6 +57,7 @@ const App: React.FC = () => {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {currentView === 'protocol' && <ProtocolOverview />}
           {currentView === 'portfolio' && <MyPortfolio />}
+          {currentView === 'admin' && <AdminDashboard />}
         </main>
       </div>
     </Web3Provider>
