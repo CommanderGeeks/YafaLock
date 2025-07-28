@@ -23,7 +23,7 @@ interface CommunityOffer {
 }
 
 export const AdminDashboard: React.FC = () => {
-  const { web3State, otcStats, refreshData, loading } = useWeb3();
+  const { web3State, otcStats, publicOffer, refreshData, loading } = useWeb3(); // Add publicOffer here
   const [isOwner, setIsOwner] = useState(false);
   const [communityOffers, setCommunityOffers] = useState<CommunityOffer[]>([]);
   const [showCreatePublicOffer, setShowCreatePublicOffer] = useState(false);
@@ -268,21 +268,113 @@ export const AdminDashboard: React.FC = () => {
         <div className="lg:col-span-2 bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 p-6 shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-white">Public OTC Offers</h3>
-            <button 
-              onClick={() => setShowCreatePublicOffer(true)}
-              className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Public Offer</span>
-            </button>
+            {!publicOffer?.active && (
+              <button 
+                onClick={() => setShowCreatePublicOffer(true)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-semibold px-4 py-2 rounded-full transition-all duration-200 border border-emerald-400/30 hover:shadow-[0_0_20px_rgba(19,255,145,0.4)] text-sm flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Public Offer</span>
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">
-            <div className="text-center py-8 text-gray-400">
-              <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No active public offers</p>
-              <p className="text-sm mt-1">Create offers for the entire community</p>
-            </div>
+            {publicOffer?.active ? (
+              <div className="bg-gray-700/30 border border-emerald-500/30 rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-full flex items-center justify-center">
+                      <DollarSign className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-white text-lg">Active Public Offer</h4>
+                      <p className="text-xs text-gray-400">Available to all community members</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 text-xs bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">
+                    Live
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-400">Total USDT</p>
+                    <p className="text-lg font-semibold text-white">{formatCurrency(publicOffer.totalUsdtAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Total Tokens</p>
+                    <p className="text-lg font-semibold text-white">{formatNumber(publicOffer.totalTokenAmount)} YAFA</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Remaining USDT</p>
+                    <p className="text-lg font-semibold text-emerald-400">{formatCurrency(publicOffer.remainingUsdtAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Remaining Tokens</p>
+                    <p className="text-lg font-semibold text-emerald-400">{formatNumber(publicOffer.remainingTokenAmount)} YAFA</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-400">Rate per YAFA</p>
+                    <p className="text-lg font-semibold text-yellow-400">
+                      {formatCurrency((parseFloat(publicOffer.remainingUsdtAmount) / parseFloat(publicOffer.remainingTokenAmount)).toString())}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Progress</p>
+                    <p className="text-lg font-semibold text-white">
+                      {((parseFloat(publicOffer.totalTokenAmount) - parseFloat(publicOffer.remainingTokenAmount)) / parseFloat(publicOffer.totalTokenAmount) * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-300">Time Remaining:</span>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <span className="text-white font-medium">
+                        {Math.max(0, Math.floor((publicOffer.offerStartTime + publicOffer.offerDuration - Date.now() / 1000) / (24 * 60 * 60)))}d {Math.max(0, Math.floor(((publicOffer.offerStartTime + publicOffer.offerDuration - Date.now() / 1000) % (24 * 60 * 60)) / (60 * 60)))}h
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <TransactionButton 
+                    onClick={async () => {
+                      try {
+                        if (!web3State.contract) return;
+                        const tx = await web3State.contract.revokePublicOTC();
+                        await tx.wait();
+                        await refreshData();
+                      } catch (error) {
+                        console.error('Failed to revoke public offer:', error);
+                      }
+                    }}
+                    variant="warning"
+                    className="flex-1 text-sm"
+                  >
+                    Revoke Offer
+                  </TransactionButton>
+                  <button 
+                    onClick={refreshData}
+                    className="flex-1 bg-gray-700/50 hover:bg-gray-600/50 text-gray-200 border border-gray-600/30 py-2 px-4 rounded-full transition-colors backdrop-blur-sm text-sm"
+                  >
+                    Refresh Status
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No active public offers</p>
+                <p className="text-sm mt-1">Create offers for the entire community</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
