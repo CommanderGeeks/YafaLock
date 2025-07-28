@@ -30,15 +30,33 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         setLoading(true);
         setError(null);
         
+        console.log('Connecting wallet...');
+        
         // Request account access
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts',
         });
         
+        console.log('Accounts:', accounts);
+        
         if (accounts.length > 0) {
+          // Check if ethers is available
+          if (!window.ethers) {
+            throw new Error('Ethers.js library not loaded');
+          }
+          
           // Create ethers provider and signer
           const provider = new window.ethers.providers.Web3Provider(window.ethereum);
           const signer = provider.getSigner();
+          
+          // Check network
+          const network = await provider.getNetwork();
+          console.log('Current network:', network);
+          
+          if (network.chainId !== CONTRACT_CONFIG.CHAIN_ID) {
+            console.warn(`Wrong network. Expected ${CONTRACT_CONFIG.CHAIN_ID}, got ${network.chainId}`);
+            // You might want to prompt user to switch networks here
+          }
           
           // Create contract instance
           const contract = new window.ethers.Contract(
@@ -46,6 +64,8 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
             YAFA_LOCK_ABI,
             signer
           );
+          
+          console.log('Contract created:', contract.address);
           
           setWeb3State({
             account: accounts[0],
@@ -62,6 +82,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         setError('Please install MetaMask or another Web3 wallet');
       }
     } catch (err: any) {
+      console.error('Wallet connection error:', err);
       setError(`Failed to connect wallet: ${err.message}`);
     } finally {
       setLoading(false);
@@ -71,47 +92,103 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const refreshDataWithContract = async (contract: any, account: string): Promise<void> => {
     try {
       setLoading(true);
+      console.log('Refreshing contract data for account:', account);
       
-      // Get vesting status
-      const vestingData = await contract.getVestingStatus(account);
-      setVestingStatus({
-        initialized: vestingData.initialized,
-        totalAmount: window.ethers.utils.formatUnits(vestingData.totalAmount, 18),
-        totalClaimed: window.ethers.utils.formatUnits(vestingData.totalClaimed, 18),
-        tokensOTCed: window.ethers.utils.formatUnits(vestingData.tokensOTCed, 18),
-        totalUsdtReceived: window.ethers.utils.formatUnits(vestingData.totalUsdtReceived, 6),
-        availableTokens: window.ethers.utils.formatUnits(vestingData.availableTokens, 18),
-        claimableNow: window.ethers.utils.formatUnits(vestingData.claimableNow, 18),
-        monthsClaimed: vestingData.monthsClaimed.toNumber(),
-        monthsVested: vestingData.monthsVested.toNumber(),
-        nextClaimTime: vestingData.nextClaimTime.toNumber(),
-      });
+      // Get vesting status using the actual contract method
+      try {
+        const vestingData = await contract.vestingInfo(account);
+        console.log('Raw vesting data:', vestingData);
+        
+        // Calculate derived values
+        const totalAmount = vestingData.totalAmount;
+        const monthsVested = vestingData.monthsVested;
+        const monthsClaimed = vestingData.monthsClaimed;
+        const totalClaimed = vestingData.totalClaimed;
+        const tokensOTCed = vestingData.tokensOTCed;
+        const totalUsdtReceived = vestingData.totalUsdtReceived;
+        
+        // Calculate available and claimable tokens
+        // This logic should match your smart contract's calculation
+        const currentTime = Math.floor(Date.now() / 1000);
+        const monthsSinceStart = monthsVested.toNumber();
+        const availableForClaim = monthsSinceStart > monthsClaimed.toNumber() ? 
+          totalAmount.div(24).mul(monthsSinceStart - monthsClaimed.toNumber()) : 0;
+        
+        setVestingStatus({
+          initialized: vestingData.initialized,
+          totalAmount: window.ethers.utils.formatUnits(totalAmount, 18),
+          totalClaimed: window.ethers.utils.formatUnits(totalClaimed, 18),
+          tokensOTCed: window.ethers.utils.formatUnits(tokensOTCed, 18),
+          totalUsdtReceived: window.ethers.utils.formatUnits(totalUsdtReceived, 6),
+          availableTokens: window.ethers.utils.formatUnits(totalAmount.sub(totalClaimed).sub(tokensOTCed), 18),
+          claimableNow: window.ethers.utils.formatUnits(availableForClaim, 18),
+          monthsClaimed: monthsClaimed.toNumber(),
+          monthsVested: monthsVested.toNumber(),
+          nextClaimTime: vestingData.initialLockTime.toNumber() + ((monthsClaimed.toNumber() + 1) * 30 * 24 * 60 * 60), // Rough calculation
+        });
+      } catch (vestingError) {
+        console.error('Error fetching vesting data:', vestingError);
+        // Set default vesting status if user hasn't initialized
+        setVestingStatus({
+          initialized: false,
+          totalAmount: '0',
+          totalClaimed: '0',
+          tokensOTCed: '0',
+          totalUsdtReceived: '0',
+          availableTokens: '0',
+          claimableNow: '0',
+          monthsClaimed: 0,
+          monthsVested: 0,
+          nextClaimTime: 0,
+        });
+      }
       
-      // Get public offer
-      const publicOfferData = await contract.getPublicOffer();
-      setPublicOffer({
-        totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.totalUsdtAmount, 6),
-        totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData.totalTokenAmount, 18),
-        remainingUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.remainingUsdtAmount, 6),
-        remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 18),
-        offerDuration: publicOfferData.offerDuration.toNumber(),
-        offerStartTime: publicOfferData.offerStartTime.toNumber(),
-        timeRemaining: publicOfferData.timeRemaining.toNumber(),
-        active: publicOfferData.active,
-        expired: publicOfferData.expired,
-      });
+      // Get public offer using the actual contract method
+      try {
+        const publicOfferData = await contract.publicOffer();
+        console.log('Raw public offer data:', publicOfferData);
+        
+        const currentTime = Math.floor(Date.now() / 1000);
+        const timeRemaining = Math.max(0, publicOfferData.offerStartTime.toNumber() + publicOfferData.offerDuration.toNumber() - currentTime);
+        const expired = timeRemaining === 0;
+        
+        setPublicOffer({
+          totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.totalUsdtAmount, 6),
+          totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData.totalTokenAmount, 18),
+          remainingUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.remainingUsdtAmount, 6),
+          remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 18),
+          offerDuration: publicOfferData.offerDuration.toNumber(),
+          offerStartTime: publicOfferData.offerStartTime.toNumber(),
+          timeRemaining,
+          active: publicOfferData.active && !expired,
+          expired,
+        });
+      } catch (publicOfferError) {
+        console.error('Error fetching public offer:', publicOfferError);
+        setPublicOffer({
+          totalUsdtAmount: '0',
+          totalTokenAmount: '0',
+          remainingUsdtAmount: '0',
+          remainingTokenAmount: '0',
+          offerDuration: 0,
+          offerStartTime: 0,
+          timeRemaining: 0,
+          active: false,
+          expired: true,
+        });
+      }
       
-      // Get private offer
-      const privateOfferData = await contract.getPrivateOffer(account);
+      // Note: Private offers might need to be fetched differently
+      // since there's no direct getter in the contract
       setPrivateOffer({
-        recipient: privateOfferData.recipient,
-        usdtAmount: window.ethers.utils.formatUnits(privateOfferData.usdtAmount, 6),
-        tokenAmount: window.ethers.utils.formatUnits(privateOfferData.tokenAmount, 18),
-        offerDuration: privateOfferData.offerDuration.toNumber(),
-        offerStartTime: privateOfferData.offerStartTime.toNumber(),
-        timeRemaining: privateOfferData.timeRemaining.toNumber(),
-        active: privateOfferData.active,
-        expired: privateOfferData.expired,
+        recipient: '',
+        usdtAmount: '0',
+        tokenAmount: '0',
+        offerDuration: 0,
+        offerStartTime: 0,
+        timeRemaining: 0,
+        active: false,
+        expired: true,
       });
       
     } catch (err: any) {
@@ -150,14 +227,39 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         }
       };
 
+      const handleChainChanged = (chainId: string) => {
+        // Reload the page when chain changes
+        window.location.reload();
+      };
+
       window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
 
       return () => {
         if (window.ethereum.removeListener) {
           window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
         }
       };
     }
+  }, []);
+
+  // Auto-connect if already connected
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            await connectWallet();
+          }
+        } catch (error) {
+          console.error('Error checking connection:', error);
+        }
+      }
+    };
+
+    checkConnection();
   }, []);
 
   const value: Web3ContextType = {
