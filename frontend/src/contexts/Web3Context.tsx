@@ -100,24 +100,27 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         const vestingData = await contract.getVestingStatus(account);
         console.log('Raw vesting data:', vestingData);
         
+        // Handle array response - [initialized, established, totalAmount, totalClaimed, tokensOTCed, totalUsdtReceived, availableTokens, claimableNow, monthsClaimed, monthsVested, nextClaimTime, initialLockDuration]
         setVestingStatus({
-          initialized: vestingData.initialized,
-          totalAmount: window.ethers.utils.formatUnits(vestingData.totalAmount, 6),
-          totalClaimed: window.ethers.utils.formatUnits(vestingData.totalClaimed, 6),
-          tokensOTCed: window.ethers.utils.formatUnits(vestingData.tokensOTCed, 6),
-          totalUsdtReceived: window.ethers.utils.formatUnits(vestingData.totalUsdtReceived, 6),
-          availableTokens: window.ethers.utils.formatUnits(vestingData.availableTokens, 6),
-          claimableNow: window.ethers.utils.formatUnits(vestingData.claimableNow, 6),
-          monthsClaimed: vestingData.monthsClaimed.toNumber(),
-          monthsVested: vestingData.monthsVested.toNumber(),
-          nextClaimTime: vestingData.nextClaimTime.toNumber(),
-          initialLockDuration: vestingData.initialLockDuration.toNumber(),
+          initialized: vestingData[0],
+          established: vestingData[1],
+          totalAmount: window.ethers.utils.formatUnits(vestingData[2], 6),
+          totalClaimed: window.ethers.utils.formatUnits(vestingData[3], 6),
+          tokensOTCed: window.ethers.utils.formatUnits(vestingData[4], 6),
+          totalUsdtReceived: window.ethers.utils.formatUnits(vestingData[5], 6),
+          availableTokens: window.ethers.utils.formatUnits(vestingData[6], 6),
+          claimableNow: window.ethers.utils.formatUnits(vestingData[7], 6),
+          monthsClaimed: vestingData[8].toNumber(),
+          monthsVested: vestingData[9].toNumber(),
+          nextClaimTime: vestingData[10].toNumber(),
+          initialLockDuration: vestingData[11].toNumber(),
         });
       } catch (vestingError) {
         console.error('Error fetching vesting data:', vestingError);
         // Set default vesting status if user hasn't initialized
         setVestingStatus({
           initialized: false,
+          established: false,
           totalAmount: '0',
           totalClaimed: '0',
           tokensOTCed: '0',
@@ -136,16 +139,17 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         const publicOfferData = await contract.getPublicOffer();
         console.log('Raw public offer data:', publicOfferData);
         
+        // Handle array response - [totalUsdtAmount, totalTokenAmount, remainingUsdtAmount, remainingTokenAmount, offerDuration, offerStartTime, timeRemaining, active, expired]
         setPublicOffer({
-          totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.totalUsdtAmount, 6),
-          totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData.totalTokenAmount, 6),
-          remainingUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.remainingUsdtAmount, 6),
-          remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 6),
-          offerDuration: publicOfferData.offerDuration.toNumber(),
-          offerStartTime: publicOfferData.offerStartTime.toNumber(),
-          timeRemaining: publicOfferData.timeRemaining.toNumber(),
-          active: publicOfferData.active,
-          expired: publicOfferData.expired,
+          totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData[0], 6),
+          totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData[1], 6),
+          remainingUsdtAmount: window.ethers.utils.formatUnits(publicOfferData[2], 6),
+          remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData[3], 6),
+          offerDuration: publicOfferData[4].toNumber(),
+          offerStartTime: publicOfferData[5].toNumber(),
+          timeRemaining: publicOfferData[6].toNumber(),
+          active: publicOfferData[7],
+          expired: publicOfferData[8],
         });
       } catch (publicOfferError) {
         console.error('Error fetching public offer:', publicOfferError);
@@ -167,15 +171,16 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         const privateOfferData = await contract.getPrivateOffer(account);
         console.log('Raw private offer data:', privateOfferData);
         
+        // Handle array response - [recipient, usdtAmount, tokenAmount, offerDuration, offerStartTime, timeRemaining, active, expired]
         setPrivateOffer({
-          recipient: privateOfferData.recipient,
-          usdtAmount: window.ethers.utils.formatUnits(privateOfferData.usdtAmount, 6),
-          tokenAmount: window.ethers.utils.formatUnits(privateOfferData.tokenAmount, 6),
-          offerDuration: privateOfferData.offerDuration.toNumber(),
-          offerStartTime: privateOfferData.offerStartTime.toNumber(),
-          timeRemaining: privateOfferData.timeRemaining.toNumber(),
-          active: privateOfferData.active,
-          expired: privateOfferData.expired,
+          recipient: privateOfferData[0],
+          usdtAmount: window.ethers.utils.formatUnits(privateOfferData[1], 6),
+          tokenAmount: window.ethers.utils.formatUnits(privateOfferData[2], 6),
+          offerDuration: privateOfferData[3].toNumber(),
+          offerStartTime: privateOfferData[4].toNumber(),
+          timeRemaining: privateOfferData[5].toNumber(),
+          active: privateOfferData[6],
+          expired: privateOfferData[7],
         });
       } catch (privateOfferError) {
         console.error('Error fetching private offer:', privateOfferError);
@@ -191,17 +196,40 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         });
       }
 
-      // Get OTC statistics using the new getter method
+      // Get OTC statistics - use fallback methods if getOTCStats doesn't exist
       try {
-        const otcStatsData = await contract.getOTCStats();
-        console.log('Raw OTC stats data:', otcStatsData);
+        let otcStatsData;
         
-        setOtcStats({
-          totalUsdtSpent: window.ethers.utils.formatUnits(otcStatsData.totalUsdtSpent, 6),
-          totalTokensAcquired: window.ethers.utils.formatUnits(otcStatsData.totalTokensAcquired, 6),
-          contractTokenBalance: window.ethers.utils.formatUnits(otcStatsData.contractTokenBalance, 6),
-          contractUsdtBalance: window.ethers.utils.formatUnits(otcStatsData.contractUsdtBalance, 6),
-        });
+        // Try the new method first
+        try {
+          otcStatsData = await contract.getOTCStats();
+          console.log('Raw OTC stats data:', otcStatsData);
+          
+          // Handle array response - [totalUsdtSpent, totalTokensAcquired, contractTokenBalance, contractUsdtBalance]
+          setOtcStats({
+            totalUsdtSpent: window.ethers.utils.formatUnits(otcStatsData[0], 6),
+            totalTokensAcquired: window.ethers.utils.formatUnits(otcStatsData[1], 6),
+            contractTokenBalance: window.ethers.utils.formatUnits(otcStatsData[2], 6),
+            contractUsdtBalance: window.ethers.utils.formatUnits(otcStatsData[3], 6),
+          });
+        } catch (newMethodError) {
+          console.log('getOTCStats not available, using fallback methods');
+          
+          // Fallback to individual method calls
+          const [totalUsdtSpent, totalTokensAcquired, contractTokenBalance, contractUsdtBalance] = await Promise.all([
+            contract.totalOTCUsdtSpent ? contract.totalOTCUsdtSpent() : Promise.resolve(0),
+            contract.totalOTCTokensAcquired ? contract.totalOTCTokensAcquired() : Promise.resolve(0),
+            contract.getContractTokenBalance(),
+            contract.getContractUSDTBalance()
+          ]);
+          
+          setOtcStats({
+            totalUsdtSpent: window.ethers.utils.formatUnits(totalUsdtSpent, 6),
+            totalTokensAcquired: window.ethers.utils.formatUnits(totalTokensAcquired, 6),
+            contractTokenBalance: window.ethers.utils.formatUnits(contractTokenBalance, 6),
+            contractUsdtBalance: window.ethers.utils.formatUnits(contractUsdtBalance, 6),
+          });
+        }
       } catch (otcStatsError) {
         console.error('Error fetching OTC stats:', otcStatsError);
         setOtcStats({

@@ -116,9 +116,6 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
             totalTokensNeeded += _amounts[i];
         }
         
-        // Ensure contract has enough tokens
-        require(token.balanceOf(address(this)) >= totalTokensNeeded, "Insufficient contract token balance");
-        
         remainingVestedPeople += _users.length;
     }
 
@@ -519,6 +516,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
      */
     function getVestingStatus(address _user) external view returns (
         bool initialized,
+        bool established,
         uint256 totalAmount,
         uint256 totalClaimed,
         uint256 tokensOTCed,
@@ -533,6 +531,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         VestingInfo storage info = vestingInfo[_user];
         
         initialized = info.initialized;
+        established = info.established;
         totalAmount = info.totalAmount;
         totalClaimed = info.totalClaimed;
         tokensOTCed = info.tokensOTCed;

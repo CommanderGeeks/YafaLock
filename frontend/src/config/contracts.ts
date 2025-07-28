@@ -1,7 +1,7 @@
 // Contract Configuration
 export const CONTRACT_CONFIG = {
   // Replace these with your actual deployed contract addresses
-  YAFA_LOCK_ADDRESS: '0x97ce16B79Bd47a6A24558F9d87F1D4f09a3e6504',
+  YAFA_LOCK_ADDRESS: '0x60886a69dB0dF9FBc03C420FfB16De4038279B2b', 
   YAFA_TOKEN_ADDRESS: '0xB95a30Af9A812a1C633A98fB2F5A7257aCdc2cE1',
   USDT_ADDRESS: '0x81eA976BdeEe2151171a7a2c19Bad80b6C629afd',
   CHAIN_ID: 8453, // Base Mainnet
@@ -108,19 +108,6 @@ export const YAFA_LOCK_ABI = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "string",
-        "name": "offerType",
-        "type": "string"
-      }
-    ],
-    "name": "OfferExpired",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
         "indexed": true,
         "internalType": "address",
         "name": "previousOwner",
@@ -134,31 +121,6 @@ export const YAFA_LOCK_ABI = [
       }
     ],
     "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "usdtAmount",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "tokenAmount",
-        "type": "uint256"
-      }
-    ],
-    "name": "PrivateOfferAccepted",
     "type": "event"
   },
   {
@@ -190,6 +152,31 @@ export const YAFA_LOCK_ABI = [
       }
     ],
     "name": "PrivateOfferCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "usdtAmount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "tokenAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "PrivateOfferAccepted",
     "type": "event"
   },
   {
@@ -350,7 +337,7 @@ export const YAFA_LOCK_ABI = [
         "type": "uint256"
       }
     ],
-    "name": "acceptPublicOTC",
+    "name": "acceptPublicOTCOffer",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -409,29 +396,6 @@ export const YAFA_LOCK_ABI = [
         "internalType": "bool",
         "name": "active",
         "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getAllActiveOffers",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "publicOfferActive",
-        "type": "bool"
-      },
-      {
-        "internalType": "uint256",
-        "name": "publicOfferUsdt",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "publicOfferTokens",
-        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -529,6 +493,34 @@ export const YAFA_LOCK_ABI = [
       {
         "internalType": "uint256",
         "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getOTCStats",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "totalUsdtSpent",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "totalTokensAcquired",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "contractTokenBalance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "contractUsdtBalance",
         "type": "uint256"
       }
     ],
@@ -643,19 +635,6 @@ export const YAFA_LOCK_ABI = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "getTotalClaimableTokens",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -687,6 +666,11 @@ export const YAFA_LOCK_ABI = [
       {
         "internalType": "bool",
         "name": "initialized",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "established",
         "type": "bool"
       },
       {
@@ -733,6 +717,11 @@ export const YAFA_LOCK_ABI = [
         "internalType": "uint256",
         "name": "nextClaimTime",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "initialLockDuration",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -742,22 +731,22 @@ export const YAFA_LOCK_ABI = [
     "inputs": [
       {
         "internalType": "address[]",
-        "name": "addys",
+        "name": "_users",
         "type": "address[]"
       },
       {
         "internalType": "uint256[]",
-        "name": "tokenAmts",
+        "name": "_amounts",
         "type": "uint256[]"
       },
       {
         "internalType": "uint256[]",
-        "name": "initialLocks",
+        "name": "_lockDurations",
         "type": "uint256[]"
       },
       {
         "internalType": "uint256[]",
-        "name": "monthsVested",
+        "name": "_monthsVested",
         "type": "uint256[]"
       }
     ],
@@ -948,6 +937,32 @@ export const YAFA_LOCK_ABI = [
         "internalType": "contract IERC20",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalOTCTokensAcquired",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalOTCUsdtSpent",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

@@ -123,7 +123,7 @@ export const MyPortfolio: React.FC = () => {
   }
 
   // No lock initialization available
-  if (!vestingStatus.initialized && parseFloat(vestingStatus.totalAmount) === 0) {
+  if (!vestingStatus.established) {
     return (
       <div className="space-y-8">
         <div className="flex items-center justify-between">
@@ -163,7 +163,7 @@ export const MyPortfolio: React.FC = () => {
   }
 
   // Lock available but not initialized
-  if (!vestingStatus.initialized && parseFloat(vestingStatus.totalAmount) > 0) {
+  if (vestingStatus.established && !vestingStatus.initialized) {
     // We need to get the raw vesting info to show lock details
     return (
       <div className="space-y-8">

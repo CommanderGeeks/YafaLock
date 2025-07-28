@@ -1,6 +1,7 @@
 // Contract Types and Interfaces
 export interface VestingStatus {
   initialized: boolean;
+  established: boolean;
   totalAmount: string;
   totalClaimed: string;
   tokensOTCed: string;
