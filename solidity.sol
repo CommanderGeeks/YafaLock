@@ -527,7 +527,8 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         uint256 claimableNow,
         uint256 monthsClaimed,
         uint256 monthsVested,
-        uint256 nextClaimTime
+        uint256 nextClaimTime,
+        uint256 initialLockDuration
     ) {
         VestingInfo storage info = vestingInfo[_user];
         
@@ -540,6 +541,7 @@ contract YafaLock is ReentrancyGuard, Ownable(msg.sender) {
         claimableNow = getClaimableTokens(_user);
         monthsClaimed = info.monthsClaimed;
         monthsVested = info.monthsVested;
+        initialLockDuration = info.initialLockDuration;
         
         // Calculate next claim time
         if (!info.initialized) {

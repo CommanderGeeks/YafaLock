@@ -17,7 +17,7 @@ export const CreateOfferModal: React.FC<CreateOfferModalProps> = ({ isOpen, onCl
     try {
       if (!web3State.contract) return;
       
-      const tokenAmountWei = window.ethers.utils.parseUnits(tokenAmount, 18);
+      const tokenAmountWei = window.ethers.utils.parseUnits(tokenAmount, 6); // Changed from 18 to 6
       const usdtAmountWei = window.ethers.utils.parseUnits(usdtAmount, 6);
       
       const tx = await web3State.contract.communityMemberOTCOffer(usdtAmountWei, tokenAmountWei);
@@ -89,37 +89,38 @@ export const ClaimPublicOfferModal: React.FC<ClaimPublicOfferModalProps> = ({ is
 
   const handleSubmit = async (): Promise<void> => {
     try {
-      if (!web3State.contract) return;
+      if (!web3State.contract || !publicOffer) return;
       
-      const tx = await web3State.contract.acceptPublicOTC(percentage);
+      const tx = await web3State.contract.acceptPublicOTCOffer(percentage);
       await tx.wait();
       
       onClose();
+      setPercentage(100);
     } catch (error) {
-      console.error('Failed to claim offer:', error);
+      console.error('Failed to claim public offer:', error);
     }
   };
 
-  if (!publicOffer || !publicOffer.active) return null;
+  if (!publicOffer) return null;
 
-  const claimAmount = (parseFloat(publicOffer.remainingTokenAmount) * percentage / 100).toFixed(4);
-  const costAmount = (parseFloat(publicOffer.remainingUsdtAmount) * percentage / 100).toFixed(2);
+  const claimAmount = ((parseFloat(publicOffer.remainingTokenAmount) * percentage) / 100).toFixed(6);
+  const costAmount = ((parseFloat(publicOffer.remainingUsdtAmount) * percentage) / 100).toFixed(2);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Claim Public Offer">
       <div className="space-y-4">
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
-          <h4 className="font-semibold text-emerald-400 mb-2">Offer Details</h4>
+        <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-4">
+          <h4 className="font-semibold text-white mb-2">Available Offer</h4>
           <div className="text-sm text-gray-300 space-y-1">
-            <p>Available: <span className="text-white font-medium">{parseFloat(publicOffer.remainingTokenAmount).toFixed(4)} YAFA</span></p>
-            <p>Price: <span className="text-white font-medium">${parseFloat(publicOffer.remainingUsdtAmount).toFixed(2)} USDT</span></p>
-            <p>Expires: <Countdown targetTimestamp={publicOffer.offerStartTime + publicOffer.offerDuration} /></p>
+            <p>Rate: ${(parseFloat(publicOffer.remainingUsdtAmount) / parseFloat(publicOffer.remainingTokenAmount)).toFixed(4)} per YAFA</p>
+            <p>Total Available: {parseFloat(publicOffer.remainingTokenAmount).toFixed(6)} YAFA</p>
+            <p>Time Remaining: <Countdown targetTimestamp={publicOffer.offerStartTime + publicOffer.offerDuration} /></p>
           </div>
         </div>
-        
+
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
-            Percentage to Claim: <span className="text-emerald-400">{percentage}%</span>
+            Participation Percentage: {percentage}%
           </label>
           <input 
             type="range"

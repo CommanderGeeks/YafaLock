@@ -102,15 +102,16 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         
         setVestingStatus({
           initialized: vestingData.initialized,
-          totalAmount: window.ethers.utils.formatUnits(vestingData.totalAmount, 18),
-          totalClaimed: window.ethers.utils.formatUnits(vestingData.totalClaimed, 18),
-          tokensOTCed: window.ethers.utils.formatUnits(vestingData.tokensOTCed, 18),
+          totalAmount: window.ethers.utils.formatUnits(vestingData.totalAmount, 6),
+          totalClaimed: window.ethers.utils.formatUnits(vestingData.totalClaimed, 6),
+          tokensOTCed: window.ethers.utils.formatUnits(vestingData.tokensOTCed, 6),
           totalUsdtReceived: window.ethers.utils.formatUnits(vestingData.totalUsdtReceived, 6),
-          availableTokens: window.ethers.utils.formatUnits(vestingData.availableTokens, 18),
-          claimableNow: window.ethers.utils.formatUnits(vestingData.claimableNow, 18),
+          availableTokens: window.ethers.utils.formatUnits(vestingData.availableTokens, 6),
+          claimableNow: window.ethers.utils.formatUnits(vestingData.claimableNow, 6),
           monthsClaimed: vestingData.monthsClaimed.toNumber(),
           monthsVested: vestingData.monthsVested.toNumber(),
           nextClaimTime: vestingData.nextClaimTime.toNumber(),
+          initialLockDuration: vestingData.initialLockDuration.toNumber(),
         });
       } catch (vestingError) {
         console.error('Error fetching vesting data:', vestingError);
@@ -126,6 +127,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
           monthsClaimed: 0,
           monthsVested: 0,
           nextClaimTime: 0,
+          initialLockDuration: 0,
         });
       }
       
@@ -136,9 +138,9 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         
         setPublicOffer({
           totalUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.totalUsdtAmount, 6),
-          totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData.totalTokenAmount, 18),
+          totalTokenAmount: window.ethers.utils.formatUnits(publicOfferData.totalTokenAmount, 6),
           remainingUsdtAmount: window.ethers.utils.formatUnits(publicOfferData.remainingUsdtAmount, 6),
-          remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 18),
+          remainingTokenAmount: window.ethers.utils.formatUnits(publicOfferData.remainingTokenAmount, 6),
           offerDuration: publicOfferData.offerDuration.toNumber(),
           offerStartTime: publicOfferData.offerStartTime.toNumber(),
           timeRemaining: publicOfferData.timeRemaining.toNumber(),
@@ -168,7 +170,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         setPrivateOffer({
           recipient: privateOfferData.recipient,
           usdtAmount: window.ethers.utils.formatUnits(privateOfferData.usdtAmount, 6),
-          tokenAmount: window.ethers.utils.formatUnits(privateOfferData.tokenAmount, 18),
+          tokenAmount: window.ethers.utils.formatUnits(privateOfferData.tokenAmount, 6),
           offerDuration: privateOfferData.offerDuration.toNumber(),
           offerStartTime: privateOfferData.offerStartTime.toNumber(),
           timeRemaining: privateOfferData.timeRemaining.toNumber(),
@@ -196,8 +198,8 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
         
         setOtcStats({
           totalUsdtSpent: window.ethers.utils.formatUnits(otcStatsData.totalUsdtSpent, 6),
-          totalTokensAcquired: window.ethers.utils.formatUnits(otcStatsData.totalTokensAcquired, 18),
-          contractTokenBalance: window.ethers.utils.formatUnits(otcStatsData.contractTokenBalance, 18),
+          totalTokensAcquired: window.ethers.utils.formatUnits(otcStatsData.totalTokensAcquired, 6),
+          contractTokenBalance: window.ethers.utils.formatUnits(otcStatsData.contractTokenBalance, 6),
           contractUsdtBalance: window.ethers.utils.formatUnits(otcStatsData.contractUsdtBalance, 6),
         });
       } catch (otcStatsError) {

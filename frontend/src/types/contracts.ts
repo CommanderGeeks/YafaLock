@@ -10,6 +10,7 @@ export interface VestingStatus {
   monthsClaimed: number;
   monthsVested: number;
   nextClaimTime: number;
+  initialLockDuration: number;
 }
 
 export interface PublicOffer {
